@@ -4,8 +4,8 @@
 This repository contains code for M2A (Mask to Adapt).
   
 The CIFAR runners implementing M2A are:
-- `cifar/cifar10c_vit_m2a.py`
-- `cifar/cifar100c_vit_m2a.py`
+- `data_cifar/cifar10c_vit_m2a.py`
+- `data_cifar/cifar100c_vit_m2a.py`
 
 ## Installation
 
@@ -20,7 +20,7 @@ Download the CIFAR-C datasets and note the directory you place them in (pass as 
 - CIFAR-10-C: https://zenodo.org/records/2535967
 - CIFAR-100-C: https://zenodo.org/records/3555552
 
-RobustBench loaders in `cifar/cifar10c_vit_m2a.py` and `cifar/cifar100c_vit_m2a.py` implement M2A and will read from `--data_dir`.
+RobustBench loaders in `data_cifar/cifar10c_vit_m2a.py` and `data_cifar/cifar100c_vit_m2a.py` implement M2A and will read from `--data_dir`.
 
 ## CIFAR Experiments
 
@@ -81,8 +81,8 @@ python -m cifar100c_vit_m2a \
 ### Notes (CIFAR-C)
 
 - Checkpoints:
-  - CIFAR-10: `cifar/cifar10c_vit_m2a.py` loads a ViT checkpoint from `/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7`.
-  - CIFAR-100: `cifar/cifar100c_vit_m2a.py` loads a checkpoint from `/users/doloriel/work/Repo/M2A/ckpt/pretrain_cifar100.t7`.
+  - CIFAR-10: `data_cifar/cifar10c_vit_m2a.py` loads a ViT checkpoint from `/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7`.
+  - CIFAR-100: `data_cifar/cifar100c_vit_m2a.py` loads a checkpoint from `/users/doloriel/work/Repo/M2A/ckpt/pretrain_cifar100.t7`.
   - If your checkpoints are elsewhere, update those paths in the scripts or place the files accordingly.
 - Input size and patch size:
   - The default input resize is `--size 384` (see `cifar/conf.py`). If using M2A masking, the input size must be divisible by `--patch_size` (e.g., 384 divisible by 8).
