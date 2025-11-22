@@ -30,7 +30,7 @@ Below is a minimal setup and the exact commands to reproduce M2A on CIFAR-10-C a
 
 ```bash
 conda init
-conda activate rem
+conda activate m2a
 cd M2A
 ```
 
@@ -43,17 +43,19 @@ Run the following from inside the `cifar/` directory (so that paths like `cfgs/.
 ```bash
 python -m cifar10c_vit_m2a \
      --cfg cfgs/cifar10/m2a.yaml \
-     --data_dir data_path \
-     --patch_size 8 \
+     --data_dir /scratch/project_465002264/datasets/cifar10c \
      --lr 0.001 \
+     --seed 3 \
      --lamb 1.0 \
      --margin 0.0 \
-     --random_masking \
+     --random_masking spectral \
      --num_squares 1 \
      --mask_type binary \
-     --m 0.10 --n 3 \
-     --logm2a_enable beta \
-     --logm2a_lr_mult 5.0 \
+     --m 0.1 --n 3 \
+     --mcl_distance ce \
+     --steps 1 \
+     --disable_erl \
+     CORRUPTION.NUM_EX 10000
 ```
 
 ### CIFAR-100 → CIFAR-100-C
@@ -61,20 +63,22 @@ python -m cifar10c_vit_m2a \
 ```bash
 python -m cifar100c_vit_m2a \
      --cfg cfgs/cifar100/m2a.yaml \
-     --data_dir data_path \
-     --patch_size 8 \
+     --data_dir /scratch/project_465002264/datasets/cifar100c \
      --lr 0.0001 \
+     --seed 1 \
      --lamb 1.0 \
      --margin 0.0 \
-     --random_masking \
+     --random_masking spectral \
      --num_squares 1 \
      --mask_type binary \
-     --m 0.10 --n 3 \
-     --logm2a_enable beta \
-     --logm2a_lr_mult 5.0 \
+     --m 0.1 --n 3 \
+     --mcl_distance ce \
+     --steps 1 \
+     --disable_erl \
+     CORRUPTION.NUM_EX 10000
 ```
 
-### Notes
+### Notes (CIFAR-C)
 
 - Checkpoints:
   - CIFAR-10: `cifar/cifar10c_vit_m2a.py` loads a ViT checkpoint from `/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7`.

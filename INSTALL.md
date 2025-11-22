@@ -5,8 +5,8 @@ This guide summarizes how to create a working ROCm-based environment for the M2A
 ## 1. Create Conda Environment
 
 ```bash
-conda create -n rem python=3.8
-conda activate rem
+conda create -n m2a python=3.8
+conda activate m2a
 ```
 
 ## 2. Install Project Requirements
@@ -25,4 +25,4 @@ The provided `requirements.txt` already includes the necessary versions and fetc
 python -c "import torch, numpy, timm, robustbench; print(torch.__version__, numpy.__version__)"
 ```
 
-If imports succeed without warnings, the environment is ready for REM scripts under `cifar/` and `imagenet/`.
+If imports succeed without warnings, the environment is ready for scripts under `cifar/` and `imagenet/`.
