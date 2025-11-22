@@ -96,8 +96,10 @@ def evaluate(description):
                         model.reset()
                         logger.info("resetting model")
                 except Exception:
+                    logger.info("")
                     logger.warning("not resetting model")
             else:
+                logger.info("")
                 logger.warning("not resetting model")
             x_test, y_test = load_cifar100c(cfg.CORRUPTION.NUM_EX,
                                             severity, cfg.DATA_DIR, False,

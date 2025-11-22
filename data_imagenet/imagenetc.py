@@ -107,7 +107,7 @@ def setup_rem(model):
                            lamb = cfg.OPTIM.LAMB,
                            margin = cfg.OPTIM.MARGIN,
                            )
-    logger.info(f"model for adaptation: %s", model)
+    # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return rem_model
 

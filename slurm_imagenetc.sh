@@ -22,7 +22,7 @@ export MIOPEN_FIND_MODE=1
 
 # Activate conda in non-interactive shells and activate the env
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
-conda activate rem
+conda activate m2a
 
 cd /users/doloriel/work/Repo/M2A/data_imagenet
 python -m imagenetc_m2a \
@@ -32,6 +32,7 @@ python -m imagenetc_m2a \
       --random_masking spectral \
       --num_squares 1 \
       --mask_type binary \
+      --disable_erl \
       CORRUPTION.NUM_EX 5000
 
 # cd /users/doloriel/work/Repo/M2A/data_imagenet

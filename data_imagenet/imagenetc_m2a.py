@@ -111,7 +111,7 @@ def setup_m2a(model):
         mask_type=cfg.M2A.MASK_TYPE,
         seed=cfg.RNG_SEED,
     )
-    logger.info(f"model for adaptation: %s", model)
+    # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return rem_model
 

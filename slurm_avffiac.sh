@@ -22,7 +22,7 @@ export MIOPEN_FIND_MODE=1
 
 # Activate conda in non-interactive shells and activate the env
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
-conda activate rem
+conda activate m2a
 
 cd /users/doloriel/work/Repo/M2A/data_avffia
 python -m avffiac_m2a \
