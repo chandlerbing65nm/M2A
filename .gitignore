@@ -87,7 +87,7 @@ slurm.sh
 
 # Ignore outputs and logs
 output/
-# logs*
+logs*
 ckpt/
 */plots
 # */scripts
