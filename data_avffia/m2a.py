@@ -126,7 +126,8 @@ def _forward_logits(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
 
 class M2A(nn.Module):
     def __init__(self, model, optimizer, steps=1, episodic=False, m=0.1, n=3, lamb=1.0, margin=0.0,
-                 random_masking: str = 'spatial', num_squares: int = 1, mask_type: str = 'binary', seed: int = None):
+                 random_masking: str = 'spatial', num_squares: int = 1, mask_type: str = 'binary', seed: int = None,
+                 disable_mcl: bool = False, disable_erl: bool = False, disable_eml: bool = False):
         super().__init__()
         self.model = model
         self.optimizer = optimizer
@@ -142,6 +143,9 @@ class M2A(nn.Module):
         self.margin = margin * math.log(1000)
 
         self.entropy = Entropy()
+        self.disable_mcl = bool(disable_mcl)
+        self.disable_erl = bool(disable_erl)
+        self.disable_eml = bool(disable_eml)
 
         rm = str(random_masking).lower()
         self.random_masking = rm if rm in ['spatial', 'spectral'] else 'spatial'
@@ -197,20 +201,37 @@ class M2A(nn.Module):
             outputs_list.append(out_m)
         self.model.train()
 
-        loss = 0.0
-        for i in range(1, len(self.mn)):
-            loss += softmax_entropy(outputs_list[i], outputs_list[0].detach()).mean()
-            for j in range(1, i):
-                loss += softmax_entropy(outputs_list[i], outputs_list[j].detach()).mean()
+        total_loss_terms = []
+        if not self.disable_mcl:
+            mcl = 0.0
+            for i in range(1, len(self.mn)):
+                mcl = mcl + softmax_entropy(outputs_list[i], outputs_list[0].detach()).mean()
+                for j in range(1, i):
+                    mcl = mcl + softmax_entropy(outputs_list[i], outputs_list[j].detach()).mean()
+            if isinstance(mcl, torch.Tensor) and mcl.requires_grad:
+                total_loss_terms.append(mcl)
 
-        entropys = [self.entropy(out) for out in outputs_list]
-        lossn = 0.0
-        for i in range(len(self.mn)):
-            for j in range(i + 1, len(self.mn)):
-                lossn += (F.relu(entropys[i] - entropys[j].detach() + self.margin)).mean()
+        if not self.disable_erl:
+            entropys = [self.entropy(out) for out in outputs_list]
+            erl = 0.0
+            for i in range(len(self.mn)):
+                for j in range(i + 1, len(self.mn)):
+                    erl = erl + (F.relu(entropys[i] - entropys[j].detach() + self.margin)).mean()
+            if isinstance(erl, torch.Tensor) and erl.requires_grad:
+                total_loss_terms.append(self.lamb * erl)
 
-        loss = loss + self.lamb * lossn
-        loss.backward()
+        if not self.disable_eml:
+            eml_terms = [self.entropy(out).mean() for out in outputs_list]
+            if len(eml_terms) > 0:
+                eml = sum(eml_terms) / float(len(eml_terms))
+                if isinstance(eml, torch.Tensor) and eml.requires_grad:
+                    total_loss_terms.append(eml)
+
+        if len(total_loss_terms) > 0:
+            loss = total_loss_terms[0]
+            for lt in total_loss_terms[1:]:
+                loss = loss + lt
+            loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 

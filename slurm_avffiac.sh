@@ -10,7 +10,7 @@
 #SBATCH --partition=small-g
 #SBATCH --time=24:00:00
 #SBATCH --account=project_465002264
-#SBATCH --output=logs/avffia/output_%j.txt
+#SBATCH --output=logs/avffiac/output_%j.txt
 
 # Use node-local scratch for MIOpen DB (avoid Lustre/NFS locking issues)
 MIOPEN_LOCAL="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}/${USER}/miopen-${SLURM_JOB_ID}"
@@ -35,9 +35,10 @@ python -m avffiac_m2a \
       --steps 1 \
       --lr 1e-5 \
       --lamb 1.0 \
-      --random_masking spectral \
+      --random_masking spatial \
       --num_squares 1 \
       --mask_type binary \
+      --disable_erl \
       CORRUPTION.NUM_EX 5600
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
@@ -51,4 +52,5 @@ python -m avffiac_m2a \
 #       --steps 1 \
 #       --lr 1e-5 \
 #       --lamb 1.0 \
+#       --disable_eml \
 #       CORRUPTION.NUM_EX 5600

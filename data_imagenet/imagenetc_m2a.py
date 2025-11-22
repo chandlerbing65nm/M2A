@@ -110,6 +110,9 @@ def setup_m2a(model):
         num_squares=cfg.M2A.NUM_SQUARES,
         mask_type=cfg.M2A.MASK_TYPE,
         seed=cfg.RNG_SEED,
+        disable_mcl=cfg.M2A.DISABLE_MCL,
+        disable_erl=cfg.M2A.DISABLE_ERL,
+        disable_eml=cfg.M2A.DISABLE_EML,
     )
     # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)

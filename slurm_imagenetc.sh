@@ -29,10 +29,11 @@ python -m imagenetc_m2a \
       --cfg cfgs/vit/m2a.yaml \
       --data_dir /scratch/project_465002264/datasets/imagenetc \
       --seed 1 \
-      --random_masking spectral \
+      --random_masking spatial \
       --num_squares 1 \
       --mask_type binary \
       --disable_erl \
+      --disable_eml \
       CORRUPTION.NUM_EX 5000
 
 # cd /users/doloriel/work/Repo/M2A/data_imagenet

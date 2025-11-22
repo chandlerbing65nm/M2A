@@ -108,6 +108,9 @@ def setup_rem(model):
                            n = cfg.OPTIM.N,
                            lamb = cfg.OPTIM.LAMB,
                            margin = cfg.OPTIM.MARGIN,
+                           disable_mcl=cfg.M2A.DISABLE_MCL,
+                           disable_erl=cfg.M2A.DISABLE_ERL,
+                           disable_eml=cfg.M2A.DISABLE_EML,
                            )
     # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)

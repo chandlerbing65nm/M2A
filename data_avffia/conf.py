@@ -160,6 +160,9 @@ _C.M2A = CfgNode()
 _C.M2A.RANDOM_MASKING = 'spatial'   # choices: 'spatial','spectral'
 _C.M2A.NUM_SQUARES = 1              # used when RANDOM_MASKING='spatial'
 _C.M2A.MASK_TYPE = 'binary'         # choices: 'binary','gaussian','mean'
+_C.M2A.DISABLE_MCL = False
+_C.M2A.DISABLE_ERL = False
+_C.M2A.DISABLE_EML = False
 
 # # Config destination (in SAVE_DIR)
 # _C.CFG_DEST = "cfg.yaml"
@@ -222,6 +225,9 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--mask_type", type=str, default=None,
                         choices=['binary','gaussian','mean'],
                         help="Mask fill type: binary (zeros), gaussian blur, or per-image mean")
+    parser.add_argument("--disable_mcl", action='store_true', help="Disable MCL loss term")
+    parser.add_argument("--disable_erl", action='store_true', help="Disable ERL loss term")
+    parser.add_argument("--disable_eml", action='store_true', help="Disable EML loss term")
     # Optimization overrides
     parser.add_argument("--m", type=float, default=None,
                         help="REM/M2A masking increment m (e.g., 0.1). Overrides OPTIM.M if provided.")
@@ -288,6 +294,25 @@ def load_cfg_fom_args(description="Config options."):
             pass
     if args.mask_type is not None:
         cfg.M2A.MASK_TYPE = args.mask_type.lower()
+    # Loss toggles
+    if getattr(args, 'disable_mcl', False):
+        try:
+            cfg.defrost()
+        except Exception:
+            pass
+        cfg.M2A.DISABLE_MCL = True
+    if getattr(args, 'disable_erl', False):
+        try:
+            cfg.defrost()
+        except Exception:
+            pass
+        cfg.M2A.DISABLE_ERL = True
+    if getattr(args, 'disable_eml', False):
+        try:
+            cfg.defrost()
+        except Exception:
+            pass
+        cfg.M2A.DISABLE_EML = True
 
     log_dest = os.path.basename(args.cfg_file)
     log_dest = log_dest.replace('.yaml', '_{}.txt'.format(current_time))
