@@ -70,7 +70,7 @@ def load_model_and_optimizer(model: nn.Module, optimizer: torch.optim.Optimizer,
 
 
 def configure_model(model: nn.Module) -> nn.Module:
-    """Enable grads where needed for SPARC CTTA and keep BatchNorm in special mode (as in REM).
+    """Enable grads where needed for M2A CTTA and keep BatchNorm in special mode (as in REM).
 
     All TALN-related wrapping has been removed.
     """
@@ -318,9 +318,9 @@ def build_random_square_mask(H: int,
 
     return mask
 
-class SPARC(nn.Module):
+class M2A(nn.Module):
     """
-    SPARC: Stochastic Patch Erasing with Adaptive Residual Correction for Continual Test-Time Adaptation.
+    M2A: Stochastic Patch Erasing with Adaptive Residual Correction for Continual Test-Time Adaptation.
 
     Masking modes:
     - Random mode (random_masking='spatial'): place `num_squares` equal-size square masks at
@@ -352,17 +352,17 @@ class SPARC(nn.Module):
                  disable_mcl: bool = False,
                  disable_erl: bool = False,
                  disable_eml: bool = False,
-                 # Logsparc options
-                 logsparc_enable: str = 'none',
-                 logsparc_lr_mult: float = 1.0,
-                 logsparc_reg: float = 0.0,
-                 logsparc_temp: float = 0.0,
+                 # Logm2a options
+                 logm2a_enable: str = 'none',
+                 logm2a_lr_mult: float = 1.0,
+                 logm2a_reg: float = 0.0,
+                 logm2a_temp: float = 0.0,
                  ):
         super().__init__()
         self.model = model
         self.optimizer = optimizer
         self.steps = steps
-        assert steps > 0, "SPARC requires >= 1 step(s) to forward and update"
+        assert steps > 0, "M2A requires >= 1 step(s) to forward and update"
         self.episodic = episodic
 
         self.model_state, self.optimizer_state = copy_model_and_optimizer(self.model, self.optimizer)
@@ -434,15 +434,15 @@ class SPARC(nn.Module):
         # eval-only flag to bypass adaptation updates
         self._eval_only = False
 
-        # Logsparc state
-        self.logsparc_enable = str(logsparc_enable).lower()
-        if self.logsparc_enable not in ['none', 'gamma', 'beta', 'gammabeta']:
-            self.logsparc_enable = 'none'
-        self.logsparc_lr_mult = float(logsparc_lr_mult)
-        self.logsparc_reg = float(logsparc_reg)
-        self.logsparc_head: nn.Linear = None  # lazy init when CLS/logits dim known
-        self._logsparc_params_added = False
-        self.logsparc_temp = float(logsparc_temp)
+        # Logm2a state
+        self.logm2a_enable = str(logm2a_enable).lower()
+        if self.logm2a_enable not in ['none', 'gamma', 'beta', 'gammabeta']:
+            self.logm2a_enable = 'none'
+        self.logm2a_lr_mult = float(logm2a_lr_mult)
+        self.logm2a_reg = float(logm2a_reg)
+        self.logm2a_head: nn.Linear = None  # lazy init when CLS/logits dim known
+        self._logm2a_params_added = False
+        self.logm2a_temp = float(logm2a_temp)
 
         
 
@@ -636,7 +636,7 @@ class SPARC(nn.Module):
 
     def forward_and_adapt(self, x: torch.Tensor, optimizer: torch.optim.Optimizer,
                           **kwargs) -> torch.Tensor:
-        """Forward pass for SPARC (CTTA) with multiple masked views and adaptation update."""
+        """Forward pass for M2A (CTTA) with multiple masked views and adaptation update."""
         # If in eval-only probe mode, bypass masking/adaptation and return base logits
         if getattr(self, "_eval_only", False):
             self.model.eval()
@@ -646,9 +646,9 @@ class SPARC(nn.Module):
         B, C, H, W = x.shape
 
         outputs_list = []
-        # For Logsparc regularizer: store gamma/beta per level (including m=0 for reg only)
-        logsparc_gamma_levels: List[torch.Tensor] = []
-        logsparc_beta_levels: List[torch.Tensor] = []
+        # For Logm2a regularizer: store gamma/beta per level (including m=0 for reg only)
+        logm2a_gamma_levels: List[torch.Tensor] = []
+        logm2a_beta_levels: List[torch.Tensor] = []
         self.model.eval()
         levels = self._current_levels()
         for m in levels:
@@ -662,39 +662,39 @@ class SPARC(nn.Module):
                 z0_after = z0_ref
                 margin_teacher = None
                 # For regularizer at m=0, compute gamma/beta if needed
-                need_gb_m0 = (self.logsparc_enable != 'none') and (cls0 is not None) and (self.logsparc_reg > 0.0)
+                need_gb_m0 = (self.logm2a_enable != 'none') and (cls0 is not None) and (self.logm2a_reg > 0.0)
                 g0 = None
                 b0 = None
                 if need_gb_m0:
-                    # Lazy-create Logsparc head
-                    if self.logsparc_head is None:
+                    # Lazy-create Logm2a head
+                    if self.logm2a_head is None:
                         in_dim = int(cls0.shape[-1])
                         out_dim = 2
-                        self.logsparc_head = nn.Linear(in_dim, out_dim).to(cls0.device)
+                        self.logm2a_head = nn.Linear(in_dim, out_dim).to(cls0.device)
                         # Add params with LR multiplier
-                        if not self._logsparc_params_added:
+                        if not self._logm2a_params_added:
                             try:
                                 base_lr = self.optimizer.param_groups[0].get('lr', None)
                                 if base_lr is None:
-                                    self.optimizer.add_param_group({'params': self.logsparc_head.parameters()})
+                                    self.optimizer.add_param_group({'params': self.logm2a_head.parameters()})
                                 else:
-                                    self.optimizer.add_param_group({'params': self.logsparc_head.parameters(), 'lr': base_lr * self.logsparc_lr_mult})
+                                    self.optimizer.add_param_group({'params': self.logm2a_head.parameters(), 'lr': base_lr * self.logm2a_lr_mult})
                             except Exception:
                                 pass
-                            self._logsparc_params_added = True
+                            self._logm2a_params_added = True
                     # Compute scalar gamma/beta per sample
-                    raw = self.logsparc_head(cls0)  # [B,2]
+                    raw = self.logm2a_head(cls0)  # [B,2]
                     raw_g = raw[:, 0]
                     raw_b = raw[:, 1]
-                    if self.logsparc_temp > 0.0:
-                        raw_b = raw_b / self.logsparc_temp
+                    if self.logm2a_temp > 0.0:
+                        raw_b = raw_b / self.logm2a_temp
                     gb_g = F.softplus(raw_g)
                     gb_b = F.softplus(raw_b)
                     g0 = gb_g   # [B]
                     b0 = gb_b   # [B]
                 # Do not transform unmasked logits; only store for regularizer if enabled
-                logsparc_gamma_levels.append(g0 if (need_gb_m0 and self.logsparc_reg > 0.0) else None)
-                logsparc_beta_levels.append(b0 if (need_gb_m0 and self.logsparc_reg > 0.0) else None)
+                logm2a_gamma_levels.append(g0 if (need_gb_m0 and self.logm2a_reg > 0.0) else None)
+                logm2a_beta_levels.append(b0 if (need_gb_m0 and self.logm2a_reg > 0.0) else None)
                 outputs_list.append(out0)
                 
             else:
@@ -727,30 +727,30 @@ class SPARC(nn.Module):
                 if isinstance(out_m, tuple):
                     out_m = out_m[0]
 
-                # Apply LogSPARC only for masked images if enabled and class token available
-                if (self.logsparc_enable != 'none') and (cls_m is not None):
-                    # Lazy-create Logsparc head
-                    if self.logsparc_head is None:
+                # Apply LogM2A only for masked images if enabled and class token available
+                if (self.logm2a_enable != 'none') and (cls_m is not None):
+                    # Lazy-create Logm2a head
+                    if self.logm2a_head is None:
                         in_dim = int(cls_m.shape[-1])
                         out_dim = 2
-                        self.logsparc_head = nn.Linear(in_dim, out_dim).to(cls_m.device)
-                        if not self._logsparc_params_added:
+                        self.logm2a_head = nn.Linear(in_dim, out_dim).to(cls_m.device)
+                        if not self._logm2a_params_added:
                             try:
                                 base_lr = self.optimizer.param_groups[0].get('lr', None)
                                 if base_lr is None:
-                                    self.optimizer.add_param_group({'params': self.logsparc_head.parameters()})
+                                    self.optimizer.add_param_group({'params': self.logm2a_head.parameters()})
                                 else:
-                                    self.optimizer.add_param_group({'params': self.logsparc_head.parameters(), 'lr': base_lr * self.logsparc_lr_mult})
+                                    self.optimizer.add_param_group({'params': self.logm2a_head.parameters(), 'lr': base_lr * self.logm2a_lr_mult})
                             except Exception:
                                 pass
-                            self._logsparc_params_added = True
+                            self._logm2a_params_added = True
                     # Compute gamma/beta depending on type
                     # scalar per-sample
-                    raw = self.logsparc_head(cls_m)  # [B,2]
+                    raw = self.logm2a_head(cls_m)  # [B,2]
                     raw_g = raw[:, 0]
                     raw_b = raw[:, 1]
-                    if self.logsparc_temp > 0.0:
-                        raw_b = raw_b / self.logsparc_temp
+                    if self.logm2a_temp > 0.0:
+                        raw_b = raw_b / self.logm2a_temp
                     gb_g = F.softplus(raw_g)  # non-negative
                     gb_b = F.softplus(raw_b)
                     gamma_apply = gb_g.unsqueeze(1)  # [B,1]
@@ -758,10 +758,10 @@ class SPARC(nn.Module):
                     gamma_b = gamma_apply.squeeze(1)  # [B]
                     beta_b = beta_apply.squeeze(1)   # [B]
                     # Mode selection (which parameters to use)
-                    if self.logsparc_enable == 'gamma':
+                    if self.logm2a_enable == 'gamma':
                         beta_use = torch.zeros_like(beta_apply)
                         gamma_use = gamma_apply
-                    elif self.logsparc_enable == 'beta':
+                    elif self.logm2a_enable == 'beta':
                         beta_use = beta_apply
                         gamma_use = torch.ones_like(beta_apply)
                     else:  # 'gammabeta'
@@ -773,11 +773,11 @@ class SPARC(nn.Module):
                     mag = torch.norm(xform, p=2, dim=1, keepdim=True).clamp_min(eps)
                     out_m = xform / mag
                     # Save gamma/beta for regularizer
-                    logsparc_gamma_levels.append(gamma_b)
-                    logsparc_beta_levels.append(beta_b)
+                    logm2a_gamma_levels.append(gamma_b)
+                    logm2a_beta_levels.append(beta_b)
                 else:
-                    logsparc_gamma_levels.append(None)
-                    logsparc_beta_levels.append(None)
+                    logm2a_gamma_levels.append(None)
+                    logm2a_beta_levels.append(None)
 
                 outputs_list.append(out_m)
         self.model.train()
@@ -831,13 +831,13 @@ class SPARC(nn.Module):
             except Exception:
                 eml_loss = None
 
-        # Logsparc monotonic regularizer across levels (including m=0 baseline if available)
-        logsparc_reg_loss = None
-        if (self.logsparc_enable != 'none') and (self.logsparc_reg > 0.0):
+        # Logm2a monotonic regularizer across levels (including m=0 baseline if available)
+        logm2a_reg_loss = None
+        if (self.logm2a_enable != 'none') and (self.logm2a_reg > 0.0):
             try:
                 # Build tensors for consecutive level penalties where gamma/beta exist
                 penalties = []
-                for seq in (logsparc_gamma_levels, logsparc_beta_levels):
+                for seq in (logm2a_gamma_levels, logm2a_beta_levels):
                     prev = None
                     for val in seq:
                         if val is None:
@@ -850,9 +850,9 @@ class SPARC(nn.Module):
                         penalties.append(F.relu(prev - val).mean())
                         prev = val
                 if len(penalties) > 0:
-                    logsparc_reg_loss = sum(penalties) / float(len(penalties))
+                    logm2a_reg_loss = sum(penalties) / float(len(penalties))
             except Exception:
-                logsparc_reg_loss = None
+                logm2a_reg_loss = None
 
         # Total loss and optimizer step
         loss_terms = []
@@ -864,8 +864,8 @@ class SPARC(nn.Module):
             loss_terms.append(eml_loss)
         # taln_reg is a no-op and not included
 
-        if (logsparc_reg_loss is not None) and (self.logsparc_reg > 0.0):
-            loss_terms.append(self.logsparc_reg * logsparc_reg_loss)
+        if (logm2a_reg_loss is not None) and (self.logm2a_reg > 0.0):
+            loss_terms.append(self.logm2a_reg * logm2a_reg_loss)
         if len(loss_terms) > 0:
             loss = loss_terms[0]
             for lt in loss_terms[1:]:

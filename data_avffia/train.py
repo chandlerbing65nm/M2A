@@ -15,7 +15,7 @@ Pip requirements (minimum):
 Default paths:
   train root: /scratch/project_465002264/datasets/avffia/AVFFIA-C/clean/train
   val root:   /scratch/project_465002264/datasets/avffia/AVFFIA-C/clean/test
-  ckpt dir:   /users/doloriel/work/Repo/SPARC/ckpt
+  ckpt dir:   /users/doloriel/work/Repo/M2A/ckpt
 
 Usage example:
   python avffia/train.py \
@@ -54,9 +54,9 @@ DEFAULT_TRAIN_ROOT = \
 DEFAULT_VAL_ROOT = \
     "/scratch/project_465002264/datasets/avffia/AVFFIA-C/clean/test"
 DEFAULT_CKPT_DIR = \
-    "/users/doloriel/work/Repo/SPARC/ckpt"
+    "/users/doloriel/work/Repo/M2A/ckpt"
 DEFAULT_CLASS_MAP = \
-    "/users/doloriel/work/Repo/SPARC/avffia/robustbench/data/avffia_class_to_id_map.json"
+    "/users/doloriel/work/Repo/M2A/avffia/robustbench/data/avffia_class_to_id_map.json"
 
 
 @dataclass

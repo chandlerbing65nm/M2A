@@ -24,11 +24,11 @@ export MIOPEN_FIND_MODE=1
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate rem
 
-cd /users/doloriel/work/Repo/SPARC/data_avffia
-python -m avffiac_sparc \
-      --cfg cfgs/vit/sparc.yaml \
+cd /users/doloriel/work/Repo/M2A/data_avffia
+python -m avffiac_m2a \
+      --cfg cfgs/vit/m2a.yaml \
       --data_dir /scratch/project_465002264/datasets/avffia \
-      --checkpoint /users/doloriel/work/Repo/SPARC/ckpt/uffia_vitb16_best.pth \
+      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
       --seed 1 \
       --m 0.1 \
       --n 3 \
@@ -40,11 +40,11 @@ python -m avffiac_sparc \
       --mask_type binary \
       CORRUPTION.NUM_EX 5600
 
-# cd /users/doloriel/work/Repo/SPARC/data_avffia
+# cd /users/doloriel/work/Repo/M2A/data_avffia
 # python -m avffiac \
 #       --cfg cfgs/vit/rem.yaml \
 #       --data_dir /scratch/project_465002264/datasets/avffia \
-#       --checkpoint /users/doloriel/work/Repo/SPARC/ckpt/uffia_vitb16_best.pth \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
 #       --seed 1 \
 #       --m 0.1 \
 #       --n 3 \

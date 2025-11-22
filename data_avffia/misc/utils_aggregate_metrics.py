@@ -278,9 +278,9 @@ def main():
     args = parser.parse_args()
 
     default_logs = [
-        "/users/doloriel/work/Repo/SPARC/logs/output_13685926.txt",
-        "/users/doloriel/work/Repo/SPARC/logs/output_13685937.txt",
-        "/users/doloriel/work/Repo/SPARC/logs/output_13685946.txt",
+        "/users/doloriel/work/Repo/M2A/logs/output_13685926.txt",
+        "/users/doloriel/work/Repo/M2A/logs/output_13685937.txt",
+        "/users/doloriel/work/Repo/M2A/logs/output_13685946.txt",
     ]
     log_paths = [Path(p) for p in (args.logs if args.logs else default_logs)]
 

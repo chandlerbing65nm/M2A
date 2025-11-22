@@ -10,7 +10,7 @@ from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
 
-import sparc
+import m2a
 from conf import cfg, load_cfg_fom_args
 import operators
 
@@ -31,8 +31,8 @@ def evaluate(description):
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
     if cfg.MODEL.ADAPTATION == "REM":
-        logger.info("test-time adaptation: SPARC")
-        model = setup_sparc(base_model)
+        logger.info("test-time adaptation: M2A")
+        model = setup_m2a(base_model)
     # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -94,11 +94,11 @@ def setup_optimizer_rem(params):
     else:
         raise NotImplementedError
 
-def setup_sparc(model):
-    model = sparc.configure_model(model)
-    params = sparc.collect_params(model)
+def setup_m2a(model):
+    model = m2a.configure_model(model)
+    params = m2a.collect_params(model)
     optimizer = setup_optimizer_rem(params)
-    rem_model = sparc.SPARC(
+    rem_model = m2a.M2A(
         model, optimizer,
         steps=cfg.OPTIM.STEPS,
         episodic=cfg.MODEL.EPISODIC,
@@ -106,9 +106,9 @@ def setup_sparc(model):
         n=cfg.OPTIM.N,
         lamb=cfg.OPTIM.LAMB,
         margin=cfg.OPTIM.MARGIN,
-        random_masking=cfg.SPARC.RANDOM_MASKING,
-        num_squares=cfg.SPARC.NUM_SQUARES,
-        mask_type=cfg.SPARC.MASK_TYPE,
+        random_masking=cfg.M2A.RANDOM_MASKING,
+        num_squares=cfg.M2A.NUM_SQUARES,
+        mask_type=cfg.M2A.MASK_TYPE,
         seed=cfg.RNG_SEED,
     )
     logger.info(f"model for adaptation: %s", model)

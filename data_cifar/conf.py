@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Configuration file (powered by YACS) for SPARC: Stochastic Patch Erasing with
+"""Configuration file (powered by YACS) for M2A: Stochastic Patch Erasing with
 Adaptive Residual Correction for Continual Test-Time Adaptation (CTTA), and related baselines."""
 
 import argparse
@@ -170,30 +170,30 @@ _C.PHASE.CWAL_THRESHOLD = 0.7
 
 # (Removed phase-mix-then-mask config)
 
-# SPARC: Stochastic Patch Erasing with Adaptive Residual Correction for
+# M2A: Stochastic Patch Erasing with Adaptive Residual Correction for
 # Continual Test-Time Adaptation (CTTA) options
-_C.SPARC = CfgNode()
-_C.SPARC.RANDOM_MASKING = 'spatial'
-_C.SPARC.NUM_SQUARES = 1
-_C.SPARC.MASK_TYPE = 'binary'  # choices: 'binary', 'gaussian', 'mean'
-_C.SPARC.PLOT_LOSS = False
-_C.SPARC.PLOT_LOSS_PATH = ""
-_C.SPARC.PLOT_EMA_ALPHA = 0.98
-_C.SPARC.MCL_TEMPERATURE = 1.0
-_C.SPARC.MCL_TEMPERATURE_APPLY = 'both'  # choices: 'teacher', 'student', 'both'
-_C.SPARC.MCL_DISTANCE = 'ce'             # choices: 'ce','kl','js','mse','mae'
-_C.SPARC.ERL_ACTIVATION = 'relu'         # choices: 'relu','leaky_relu','softplus','gelu','sigmoid','identity'
-_C.SPARC.ERL_LEAKY_RELU_SLOPE = 0.01
-_C.SPARC.ERL_SOFTPLUS_BETA = 1.0
-_C.SPARC.DISABLE_MCL = False
-_C.SPARC.DISABLE_ERL = False
-_C.SPARC.DISABLE_EML = False
+_C.M2A = CfgNode()
+_C.M2A.RANDOM_MASKING = 'spatial'
+_C.M2A.NUM_SQUARES = 1
+_C.M2A.MASK_TYPE = 'binary'  # choices: 'binary', 'gaussian', 'mean'
+_C.M2A.PLOT_LOSS = False
+_C.M2A.PLOT_LOSS_PATH = ""
+_C.M2A.PLOT_EMA_ALPHA = 0.98
+_C.M2A.MCL_TEMPERATURE = 1.0
+_C.M2A.MCL_TEMPERATURE_APPLY = 'both'  # choices: 'teacher', 'student', 'both'
+_C.M2A.MCL_DISTANCE = 'ce'             # choices: 'ce','kl','js','mse','mae'
+_C.M2A.ERL_ACTIVATION = 'relu'         # choices: 'relu','leaky_relu','softplus','gelu','sigmoid','identity'
+_C.M2A.ERL_LEAKY_RELU_SLOPE = 0.01
+_C.M2A.ERL_SOFTPLUS_BETA = 1.0
+_C.M2A.DISABLE_MCL = False
+_C.M2A.DISABLE_ERL = False
+_C.M2A.DISABLE_EML = False
 # MARN (Manifold-Aware Ranked Normalization)
 # (TALN options removed)
-_C.SPARC.LOGSPARC_ENABLE = 'none'           # choices: 'none','gamma','beta','gammabeta'
-_C.SPARC.LOGSPARC_LR_MULT = 1.0             # LR multiplier for Logsparc parameters
-_C.SPARC.LOGSPARC_REG = 0.0                 # regularizer strength for monotonic gamma/beta
-_C.SPARC.LOGSPARC_TEMP = 0.0                # if >0, apply as temperature to beta pre-softplus; masked views only
+_C.M2A.LOGM2A_ENABLE = 'none'           # choices: 'none','gamma','beta','gammabeta'
+_C.M2A.LOGM2A_LR_MULT = 1.0             # LR multiplier for Logm2a parameters
+_C.M2A.LOGM2A_REG = 0.0                 # regularizer strength for monotonic gamma/beta
+_C.M2A.LOGM2A_TEMP = 0.0                # if >0, apply as temperature to beta pre-softplus; masked views only
 
 
 # # Config destination (in SAVE_DIR)
@@ -262,7 +262,7 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--hog_ratio", type=float,
                     help="hog ratio")
 
-    # SPARC (CTTA) optimization CLI options
+    # M2A (CTTA) optimization CLI options
     parser.add_argument("--steps", type=int, default=None,
                         help="Number of adaptation updates per batch (maps to OPTIM.STEPS)")
     parser.add_argument("--m", type=float, default=None,
@@ -277,7 +277,7 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--margin", type=float, default=None,
                         help="Margin multiplier in entropy-ordering loss (maps to OPTIM.MARGIN)")
 
-    # SPARC-specific CLI options
+    # M2A-specific CLI options
     # (Removed: --num_bins, --entropy_bins, --entropy_levels, --use_color_entropy, --entropy_weight_power)
     parser.add_argument("--random_masking", type=str, default=None,
                         choices=['spatial','spectral'],
@@ -286,8 +286,8 @@ def load_cfg_fom_args(description="Config options."):
                         help="Number of equal-size squares to place per masking level (default from cfg)")
     parser.add_argument("--mask_type", type=str, default=None, choices=['binary', 'gaussian', 'mean'],
                         help="How to fill masked regions: 'binary' (zero), 'gaussian' (blurred), or 'mean' (per-image mean)")
-    # (Removed SPARC pruning CLI options)
-    # SPARC plotting CLI options
+    # (Removed M2A pruning CLI options)
+    # M2A plotting CLI options
     parser.add_argument("--plot_loss", action="store_true",
                         help="If set, save a PNG plot of EMA of MCL and ERL across steps")
     parser.add_argument("--plot_loss_path", type=str, default=None,
@@ -317,17 +317,17 @@ def load_cfg_fom_args(description="Config options."):
                         help="Negative slope for LeakyReLU when erl_activation=leaky_relu")
     parser.add_argument("--erl_softplus_beta", type=float, default=None,
                         help="Beta parameter for Softplus when erl_activation=softplus")
-    # Logsparc CLI options
-    parser.add_argument("--logsparc_enable", type=str, default=None,
+    # Logm2a CLI options
+    parser.add_argument("--logm2a_enable", type=str, default=None,
                         choices=['none','gamma','beta','gammabeta'],
-                        help="Enable Logsparc on logits with mode: none|gamma|beta|gammabeta")
-    parser.add_argument("--logsparc_lr_mult", type=float, default=None,
-                        help="Learning rate multiplier for Logsparc parameters (default from cfg)")
-    parser.add_argument("--logsparc_reg", type=float, default=None,
+                        help="Enable Logm2a on logits with mode: none|gamma|beta|gammabeta")
+    parser.add_argument("--logm2a_lr_mult", type=float, default=None,
+                        help="Learning rate multiplier for Logm2a parameters (default from cfg)")
+    parser.add_argument("--logm2a_reg", type=float, default=None,
                         help="Monotonicity regularizer strength for gamma/beta across masking levels")
-    parser.add_argument("--logsparc_temp", type=float, default=None,
+    parser.add_argument("--logm2a_temp", type=float, default=None,
                         help="If > 0, apply as temperature to beta pre-softplus; only when mask ratio > 0")
-    # (Removed: logsparc_type2/logsparc_type3 and ablation flags)
+    # (Removed: logm2a_type2/logm2a_type3 and ablation flags)
     
     # (TALN CLI options removed)
     # (Removed Phase-mix-then-mask CLI arg)
@@ -369,53 +369,53 @@ def load_cfg_fom_args(description="Config options."):
     cfg.use_hog = args.use_hog
     cfg.hog_ratio = args.hog_ratio
 
-    # Populate SPARC config from CLI if provided
+    # Populate M2A config from CLI if provided
     # (Removed: num_bins/entropy_bins/entropy_levels/use_color_entropy/entropy_weight_power)
     if args.random_masking is not None:
-        cfg.SPARC.RANDOM_MASKING = args.random_masking.lower()
+        cfg.M2A.RANDOM_MASKING = args.random_masking.lower()
     if args.num_squares is not None:
-        cfg.SPARC.NUM_SQUARES = max(1, int(args.num_squares))
+        cfg.M2A.NUM_SQUARES = max(1, int(args.num_squares))
     if args.mask_type is not None:
-        cfg.SPARC.MASK_TYPE = str(args.mask_type).lower()
+        cfg.M2A.MASK_TYPE = str(args.mask_type).lower()
     # Plotting options
     if args.plot_loss:
-        cfg.SPARC.PLOT_LOSS = True
+        cfg.M2A.PLOT_LOSS = True
     if args.plot_loss_path is not None:
-        cfg.SPARC.PLOT_LOSS_PATH = args.plot_loss_path
+        cfg.M2A.PLOT_LOSS_PATH = args.plot_loss_path
     if args.plot_ema_alpha is not None:
-        cfg.SPARC.PLOT_EMA_ALPHA = args.plot_ema_alpha
+        cfg.M2A.PLOT_EMA_ALPHA = args.plot_ema_alpha
     # Disable flags
     if args.disable_mcl:
-        cfg.SPARC.DISABLE_MCL = True
+        cfg.M2A.DISABLE_MCL = True
     if args.disable_erl:
-        cfg.SPARC.DISABLE_ERL = True
+        cfg.M2A.DISABLE_ERL = True
     if args.disable_eml:
-        cfg.SPARC.DISABLE_EML = True
+        cfg.M2A.DISABLE_EML = True
     # MCL temperature
     if args.mcl_temperature is not None:
-        cfg.SPARC.MCL_TEMPERATURE = args.mcl_temperature
+        cfg.M2A.MCL_TEMPERATURE = args.mcl_temperature
     if args.mcl_temperature_apply is not None:
-        cfg.SPARC.MCL_TEMPERATURE_APPLY = args.mcl_temperature_apply.lower()
+        cfg.M2A.MCL_TEMPERATURE_APPLY = args.mcl_temperature_apply.lower()
     if args.mcl_distance is not None:
-        cfg.SPARC.MCL_DISTANCE = args.mcl_distance.lower()
+        cfg.M2A.MCL_DISTANCE = args.mcl_distance.lower()
     # ERL activation
     if args.erl_activation is not None:
-        cfg.SPARC.ERL_ACTIVATION = args.erl_activation.lower()
+        cfg.M2A.ERL_ACTIVATION = args.erl_activation.lower()
     if args.erl_leaky_relu_slope is not None:
-        cfg.SPARC.ERL_LEAKY_RELU_SLOPE = args.erl_leaky_relu_slope
+        cfg.M2A.ERL_LEAKY_RELU_SLOPE = args.erl_leaky_relu_slope
     if args.erl_softplus_beta is not None:
-        cfg.SPARC.ERL_SOFTPLUS_BETA = args.erl_softplus_beta
+        cfg.M2A.ERL_SOFTPLUS_BETA = args.erl_softplus_beta
     # (TALN options removed)
-    # Logsparc options
-    if args.logsparc_enable is not None:
-        cfg.SPARC.LOGSPARC_ENABLE = args.logsparc_enable.lower()
-    if args.logsparc_lr_mult is not None:
-        cfg.SPARC.LOGSPARC_LR_MULT = float(args.logsparc_lr_mult)
-    if args.logsparc_reg is not None:
-        cfg.SPARC.LOGSPARC_REG = float(args.logsparc_reg)
-    if args.logsparc_temp is not None:
-        cfg.SPARC.LOGSPARC_TEMP = float(args.logsparc_temp)
-    # (Removed: logsparc_type2/logsparc_type3 and ablation mappings)
+    # Logm2a options
+    if args.logm2a_enable is not None:
+        cfg.M2A.LOGM2A_ENABLE = args.logm2a_enable.lower()
+    if args.logm2a_lr_mult is not None:
+        cfg.M2A.LOGM2A_LR_MULT = float(args.logm2a_lr_mult)
+    if args.logm2a_reg is not None:
+        cfg.M2A.LOGM2A_REG = float(args.logm2a_reg)
+    if args.logm2a_temp is not None:
+        cfg.M2A.LOGM2A_TEMP = float(args.logm2a_temp)
+    # (Removed: logm2a_type2/logm2a_type3 and ablation mappings)
 
 
     log_dest = os.path.basename(args.cfg_file)

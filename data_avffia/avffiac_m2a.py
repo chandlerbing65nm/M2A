@@ -9,7 +9,7 @@ from robustbench.data import load_avffiacc
 
 from robustbench.model_zoo.rem_vit import create_model_rem
 
-import sparc
+import m2a
 from conf import cfg, load_cfg_fom_args
 import operators
 
@@ -22,7 +22,7 @@ def _build_model_from_ckpt(num_classes: int, device: torch.device) -> nn.Module:
     model = create_model_rem("vit_base_patch16_224", pretrained=False, num_classes=num_classes)
     ckpt_path = getattr(cfg.TEST, 'ckpt', None)
     if ckpt_path is None or (isinstance(ckpt_path, str) and ckpt_path.strip() == ""):
-        ckpt_path = "/users/doloriel/work/Repo/SPARC/ckpt/uffia_vitb16_best.pth"
+        ckpt_path = "/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth"
     ckpt = torch.load(ckpt_path, map_location="cpu")
     state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
     model.load_state_dict(state, strict=True)
@@ -38,8 +38,8 @@ def evaluate(description):
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
     elif cfg.MODEL.ADAPTATION == "REM":
-        logger.info("test-time adaptation: SPARC")
-        model = setup_sparc(base_model)
+        logger.info("test-time adaptation: M2A")
+        model = setup_m2a(base_model)
     else:
         logger.info("test-time adaptation: %s not supported, defaulting to NONE", cfg.MODEL.ADAPTATION)
         model = setup_source(base_model)
@@ -93,11 +93,11 @@ def setup_optimizer(params):
         raise NotImplementedError
 
 
-def setup_sparc(model):
-    model = sparc.configure_model(model)
-    params = sparc.collect_params(model)
+def setup_m2a(model):
+    model = m2a.configure_model(model)
+    params = m2a.collect_params(model)
     optimizer = setup_optimizer(params)
-    sparc_model = sparc.SPARC(
+    m2a_model = m2a.M2A(
         model, optimizer,
         steps=cfg.OPTIM.STEPS,
         episodic=cfg.MODEL.EPISODIC,
@@ -105,14 +105,14 @@ def setup_sparc(model):
         n=cfg.OPTIM.N,
         lamb=cfg.OPTIM.LAMB,
         margin=cfg.OPTIM.MARGIN,
-        random_masking=cfg.SPARC.RANDOM_MASKING,
-        num_squares=cfg.SPARC.NUM_SQUARES,
-        mask_type=cfg.SPARC.MASK_TYPE,
+        random_masking=cfg.M2A.RANDOM_MASKING,
+        num_squares=cfg.M2A.NUM_SQUARES,
+        mask_type=cfg.M2A.MASK_TYPE,
         seed=cfg.RNG_SEED,
     )
     # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)
-    return sparc_model
+    return m2a_model
 
 
 def compute_metrics(model: nn.Module,
@@ -160,10 +160,10 @@ def compute_metrics(model: nn.Module,
     nll = nll_sum / total_eval
     max_softmax = max_softmax_sum / total_eval if total_eval > 0 else 0.0
     entropy = entropy_sum / total_eval if total_eval > 0 else 0.0
-    # ECE omitted here to keep parity with imagenetc_sparc baseline
+    # ECE omitted here to keep parity with imagenetc_m2a baseline
     ece = 0.0
     return acc, nll, ece, max_softmax, entropy
 
 
 if __name__ == '__main__':
-    evaluate('AVFFIA-C SPARC evaluation.')
+    evaluate('AVFFIA-C M2A evaluation.')

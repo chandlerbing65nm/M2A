@@ -1,5 +1,5 @@
 CORRUPTION:
-  DATASET: avffia
+  DATASET: imagenet
   SEVERITY:
   - 5
   TYPE:
@@ -23,17 +23,17 @@ MODEL:
   ARCH: Standard_VITB_REM   # VIT: Standard_VITB  CNN: Standard
 OPTIM:
   BETA: 0.9
-  LR: 1e-5
+  LR: 1e-3
   METHOD: Adam
   STEPS: 1
   WD: 0.0
-  M: 0.15
+  M: 0.1
   N: 3
   LAMB: 1.0
   MARGIN: 0.0
 TEST:
-  BATCH_SIZE: 20
-SPARC:
+  BATCH_SIZE: 50
+M2A:
   RANDOM_MASKING: spatial   # choices: spatial | spectral
   NUM_SQUARES: 1            # number of random squares per masking level (spatial)
   MASK_TYPE: binary         # choices: binary | gaussian | mean

@@ -14,7 +14,7 @@ from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
 
 from conf import cfg, load_cfg_fom_args
-import sparc
+import m2a
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def rm_substr_from_state_dict(state_dict, substr):
 
 
 def evaluate(description):
-    """Evaluate SPARC: Stochastic Patch Erasing with Adaptive Residual Correction
+    """Evaluate M2A: Stochastic Patch Erasing with Adaptive Residual Correction
     for Continual Test-Time Adaptation (CTTA) on CIFAR-10-C.
 
     The evaluation iterates over corruptions/severities and measures accuracy, NLL, ECE,
@@ -43,7 +43,7 @@ def evaluate(description):
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/SPARC/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
     if isinstance(checkpoint, dict) and 'model' in checkpoint:
         base_model.load_state_dict(checkpoint['model'], strict=True)
@@ -66,8 +66,8 @@ def evaluate(description):
         logger.info("test-time adaptation: NONE (source)")
         model = setup_source(base_model)
     elif cfg.MODEL.ADAPTATION == "REM":
-        logger.info("test-time adaptation: SPARC")
-        model = setup_sparc(base_model)
+        logger.info("test-time adaptation: M2A")
+        model = setup_m2a(base_model)
     else:
         logger.info("Unknown adaptation; defaulting to source")
         model = setup_source(base_model)
@@ -146,8 +146,8 @@ def evaluate(description):
             # CFR_current = max(0, prev_acc_at_time - prev_acc_after_current). Lower is better.
             if prev_x is not None and prev_y is not None and prev_acc_at_time is not None:
                 try:
-                    sparc_model = model.module if hasattr(model, 'module') else model
-                    ctx = sparc_model.no_adapt_mode() if hasattr(sparc_model, 'no_adapt_mode') else nullcontext()
+                    m2a_model = model.module if hasattr(model, 'module') else model
+                    ctx = m2a_model.no_adapt_mode() if hasattr(m2a_model, 'no_adapt_mode') else nullcontext()
                 except Exception:
                     ctx = nullcontext()
                 with ctx:
@@ -176,7 +176,7 @@ def compute_metrics(model: nn.Module,
                     batch_size: int = 100,
                     device: torch.device = None):
     """Compute ACC, NLL, ECE, mean Max-Softmax, mean Entropy, mean cosine(pred_softmax, target_onehot)
-    and accumulate adaptation timing/MACs during SPARC CTTA.
+    and accumulate adaptation timing/MACs during M2A CTTA.
     Returns (acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total)
     """
     if device is None:
@@ -205,7 +205,7 @@ def compute_metrics(model: nn.Module,
     def estimate_vit_macs_per_image(stats_src, img_size: int) -> int:
         try:
             m = stats_src
-            # Unwrap SPARC and DataParallel to reach underlying ViT
+            # Unwrap M2A and DataParallel to reach underlying ViT
             if hasattr(m, 'module'):
                 m = m.module
             if hasattr(m, 'model'):
@@ -351,9 +351,9 @@ def setup_optimizer(params):
         raise NotImplementedError
 
 
-def setup_sparc(model):
-    model = sparc.configure_model(model)
-    params, param_names = sparc.collect_params(model, ln_quarter=cfg.MODEL.LN_QUARTER)
+def setup_m2a(model):
+    model = m2a.configure_model(model)
+    params, param_names = m2a.collect_params(model, ln_quarter=cfg.MODEL.LN_QUARTER)
     if cfg.OPTIM.METHOD == 'Adam':
         optimizer = optim.Adam(params,
                                lr=cfg.OPTIM.LR,
@@ -370,12 +370,12 @@ def setup_sparc(model):
         raise NotImplementedError
     # Debug logging
     try:
-        logger.info(f"[setup_sparc] collected params: total={len(param_names)}")
+        logger.info(f"[setup_m2a] collected params: total={len(param_names)}")
         lrs = [pg.get('lr', None) for pg in optimizer.param_groups]
-        logger.info(f"[setup_sparc] optimizer: {optimizer.__class__.__name__}, lrs={lrs}")
+        logger.info(f"[setup_m2a] optimizer: {optimizer.__class__.__name__}, lrs={lrs}")
     except Exception:
         pass
-    rem_model = sparc.SPARC(
+    rem_model = m2a.M2A(
         model, optimizer,
         steps=cfg.OPTIM.STEPS,
         episodic=cfg.MODEL.EPISODIC,
@@ -383,30 +383,30 @@ def setup_sparc(model):
         n=cfg.OPTIM.N,
         lamb=cfg.OPTIM.LAMB,
         margin=cfg.OPTIM.MARGIN,
-        random_masking=cfg.SPARC.RANDOM_MASKING,
-        num_squares=cfg.SPARC.NUM_SQUARES,
-        mask_type=cfg.SPARC.MASK_TYPE,
+        random_masking=cfg.M2A.RANDOM_MASKING,
+        num_squares=cfg.M2A.NUM_SQUARES,
+        mask_type=cfg.M2A.MASK_TYPE,
         seed=cfg.RNG_SEED,
-        plot_loss=cfg.SPARC.PLOT_LOSS,
-        plot_loss_path=cfg.SPARC.PLOT_LOSS_PATH,
-        plot_ema_alpha=cfg.SPARC.PLOT_EMA_ALPHA,
-        mcl_temperature=cfg.SPARC.MCL_TEMPERATURE,
-        mcl_temperature_apply=cfg.SPARC.MCL_TEMPERATURE_APPLY,
-        mcl_distance=cfg.SPARC.MCL_DISTANCE,
-        erl_activation=cfg.SPARC.ERL_ACTIVATION,
-        erl_leaky_relu_slope=cfg.SPARC.ERL_LEAKY_RELU_SLOPE,
-        erl_softplus_beta=cfg.SPARC.ERL_SOFTPLUS_BETA,
-        disable_mcl=cfg.SPARC.DISABLE_MCL,
-        disable_erl=cfg.SPARC.DISABLE_ERL,
-        disable_eml=cfg.SPARC.DISABLE_EML,
-        logsparc_enable=cfg.SPARC.LOGSPARC_ENABLE,
-        logsparc_lr_mult=cfg.SPARC.LOGSPARC_LR_MULT,
-        logsparc_reg=cfg.SPARC.LOGSPARC_REG,
-        logsparc_temp=cfg.SPARC.LOGSPARC_TEMP,
+        plot_loss=cfg.M2A.PLOT_LOSS,
+        plot_loss_path=cfg.M2A.PLOT_LOSS_PATH,
+        plot_ema_alpha=cfg.M2A.PLOT_EMA_ALPHA,
+        mcl_temperature=cfg.M2A.MCL_TEMPERATURE,
+        mcl_temperature_apply=cfg.M2A.MCL_TEMPERATURE_APPLY,
+        mcl_distance=cfg.M2A.MCL_DISTANCE,
+        erl_activation=cfg.M2A.ERL_ACTIVATION,
+        erl_leaky_relu_slope=cfg.M2A.ERL_LEAKY_RELU_SLOPE,
+        erl_softplus_beta=cfg.M2A.ERL_SOFTPLUS_BETA,
+        disable_mcl=cfg.M2A.DISABLE_MCL,
+        disable_erl=cfg.M2A.DISABLE_ERL,
+        disable_eml=cfg.M2A.DISABLE_EML,
+        logm2a_enable=cfg.M2A.LOGM2A_ENABLE,
+        logm2a_lr_mult=cfg.M2A.LOGM2A_LR_MULT,
+        logm2a_reg=cfg.M2A.LOGM2A_REG,
+        logm2a_temp=cfg.M2A.LOGM2A_TEMP,
         
     )
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return rem_model
 
 if __name__ == '__main__':
-    evaluate('CIFAR-10-C evaluation with SPARC: Stochastic Patch Erasing with Adaptive Residual Correction for Continual Test-Time Adaptation.')
+    evaluate('CIFAR-10-C evaluation with M2A: Stochastic Patch Erasing with Adaptive Residual Correction for Continual Test-Time Adaptation.')

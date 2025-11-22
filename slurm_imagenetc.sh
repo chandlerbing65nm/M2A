@@ -24,9 +24,9 @@ export MIOPEN_FIND_MODE=1
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate rem
 
-cd /users/doloriel/work/Repo/SPARC/data_imagenet
-python -m imagenetc_sparc \
-      --cfg cfgs/vit/sparc.yaml \
+cd /users/doloriel/work/Repo/M2A/data_imagenet
+python -m imagenetc_m2a \
+      --cfg cfgs/vit/m2a.yaml \
       --data_dir /scratch/project_465002264/datasets/imagenetc \
       --seed 1 \
       --random_masking spectral \
@@ -34,7 +34,7 @@ python -m imagenetc_sparc \
       --mask_type binary \
       CORRUPTION.NUM_EX 5000
 
-# cd /users/doloriel/work/Repo/SPARC/data_imagenet
+# cd /users/doloriel/work/Repo/M2A/data_imagenet
 # python -m imagenetc \
 #       --cfg cfgs/vit/rem.yaml \
 #       --data_dir /scratch/project_465002264/datasets/imagenetc \

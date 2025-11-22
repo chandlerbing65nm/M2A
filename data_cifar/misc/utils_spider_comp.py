@@ -153,7 +153,7 @@ def main():
     parser.add_argument('--names', nargs='+', required=True, help='Legend names, one per log')
     parser.add_argument('--metrics', nargs='+', required=True,
                         help='Metrics to plot (choose from: Error, NLL, ECE, Max Softmax, Entropy, Cosine)')
-    parser.add_argument('--outdir', default=os.path.dirname('/users/doloriel/work/Repo/SPARC/cifar/plots/SPARE/Misc/cifar10/error_rate_samples.png'),
+    parser.add_argument('--outdir', default=os.path.dirname('/users/doloriel/work/Repo/M2A/cifar/plots/SPARE/Misc/cifar10/error_rate_samples.png'),
                         help='Output directory (default: same dir as error_rate_samples.png)')
     parser.add_argument('--outfile', default='spider.png', help='Output filename (default: spider.png)')
     args = parser.parse_args()

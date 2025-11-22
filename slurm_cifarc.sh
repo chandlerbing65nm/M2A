@@ -26,11 +26,11 @@ conda activate rem
 
 # ------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------
-# --plot_loss --plot_ema_alpha 0.9 --plot_loss_path plots/SPARC/Loss/losses_marn_amr-1k.png \
+# --plot_loss --plot_ema_alpha 0.9 --plot_loss_path plots/M2A/Loss/losses_marn_amr-1k.png \
 
-cd /users/doloriel/work/Repo/SPARC/data_cifar
-python -m cifar100c_vit_sparc \
-     --cfg cfgs/cifar100/sparc.yaml \
+cd /users/doloriel/work/Repo/M2A/data_cifar
+python -m cifar100c_vit_m2a \
+     --cfg cfgs/cifar100/m2a.yaml \
      --data_dir /scratch/project_465002264/datasets/cifar100c \
      --lr 0.0001 \
      --seed 1 \
@@ -45,9 +45,9 @@ python -m cifar100c_vit_sparc \
      --disable_erl \
      CORRUPTION.NUM_EX 10000
 
-# cd /users/doloriel/work/Repo/SPARC/data_cifar
-# python -m cifar10c_vit_sparc \
-#      --cfg cfgs/cifar10/sparc.yaml \
+# cd /users/doloriel/work/Repo/M2A/data_cifar
+# python -m cifar10c_vit_m2a \
+#      --cfg cfgs/cifar10/m2a.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
 #      --lr 0.001 \
 #      --seed 3 \

@@ -155,11 +155,11 @@ _C.OPTIM.N = 3
 _C.OPTIM.LAMB = 1.0
 _C.OPTIM.MARGIN = 0.0
 
-# SPARC options
-_C.SPARC = CfgNode()
-_C.SPARC.RANDOM_MASKING = 'spatial'   # choices: 'spatial','spectral'
-_C.SPARC.NUM_SQUARES = 1              # used when RANDOM_MASKING='spatial'
-_C.SPARC.MASK_TYPE = 'binary'         # choices: 'binary','gaussian','mean'
+# M2A options
+_C.M2A = CfgNode()
+_C.M2A.RANDOM_MASKING = 'spatial'   # choices: 'spatial','spectral'
+_C.M2A.NUM_SQUARES = 1              # used when RANDOM_MASKING='spatial'
+_C.M2A.MASK_TYPE = 'binary'         # choices: 'binary','gaussian','mean'
 
 # # Config destination (in SAVE_DIR)
 # _C.CFG_DEST = "cfg.yaml"
@@ -216,7 +216,7 @@ def load_cfg_fom_args(description="Config options."):
                         help="Override RNG_SEED; if set, seeds numpy/torch/(cuda) and Python RNG")
     parser.add_argument("--random_masking", type=str, default=None,
                         choices=['spatial','spectral'],
-                        help="Random masking domain for SPARC: spatial (image space) or spectral (FFT)")
+                        help="Random masking domain for M2A: spatial (image space) or spectral (FFT)")
     parser.add_argument("--num_squares", type=int, default=None,
                         help="Number of random equal-size squares per masking level when spatial masking")
     parser.add_argument("--mask_type", type=str, default=None,
@@ -236,16 +236,16 @@ def load_cfg_fom_args(description="Config options."):
     cfg.TEST.ckpt = args.checkpoint
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)
-    # Map SPARC CLI args
+    # Map M2A CLI args
     if args.random_masking is not None:
-        cfg.SPARC.RANDOM_MASKING = args.random_masking.lower()
+        cfg.M2A.RANDOM_MASKING = args.random_masking.lower()
     if args.num_squares is not None:
         try:
-            cfg.SPARC.NUM_SQUARES = max(1, int(args.num_squares))
+            cfg.M2A.NUM_SQUARES = max(1, int(args.num_squares))
         except Exception:
             pass
     if args.mask_type is not None:
-        cfg.SPARC.MASK_TYPE = args.mask_type.lower()
+        cfg.M2A.MASK_TYPE = args.mask_type.lower()
 
     log_dest = os.path.basename(args.cfg_file)
     log_dest = log_dest.replace('.yaml', '_{}.txt'.format(current_time))

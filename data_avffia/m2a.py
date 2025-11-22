@@ -124,7 +124,7 @@ def _forward_logits(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
             return model(x)
 
 
-class SPARC(nn.Module):
+class M2A(nn.Module):
     def __init__(self, model, optimizer, steps=1, episodic=False, m=0.1, n=3, lamb=1.0, margin=0.0,
                  random_masking: str = 'spatial', num_squares: int = 1, mask_type: str = 'binary', seed: int = None):
         super().__init__()

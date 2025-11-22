@@ -24,7 +24,7 @@ def _build_model_from_ckpt(num_classes: int, device: torch.device) -> nn.Module:
     # Load local checkpoint trained with data_avffia/train.py
     ckpt_path = getattr(cfg.TEST, 'ckpt', None)
     if ckpt_path is None or (isinstance(ckpt_path, str) and ckpt_path.strip() == ""):
-        ckpt_path = "/users/doloriel/work/Repo/SPARC/ckpt/uffia_vitb16_best.pth"
+        ckpt_path = "/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth"
     ckpt = torch.load(ckpt_path, map_location="cpu")
     state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
     model.load_state_dict(state, strict=True)
