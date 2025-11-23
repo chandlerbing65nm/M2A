@@ -1,5 +1,5 @@
 
-# M2A: Mask to Adapt — Simple Random Masking Surprisingly Enables Robust Continual Test-Time Learning
+# Mask to Adapt — Simple Random Masking Surprisingly Enables Robust Continual Test-Time Learning
 
 This repository contains code for M2A (Mask to Adapt).
   
@@ -34,11 +34,11 @@ conda activate m2a
 cd M2A
 ```
 
-If you are inside the repository root, the `cifar/` folder is at `M2A/cifar/`.
+If you are inside the repository root, the `data_cifar/` folder is at `M2A/data_cifar/`.
 
 ### CIFAR-10 → CIFAR-10-C
 
-Run the following from inside the `cifar/` directory (so that paths like `cfgs/...` resolve):
+Run the following from inside the `data_cifar/` directory (so that paths like `cfgs/...` resolve):
 
 ```bash
 python -m cifar10c_vit_m2a \
@@ -48,7 +48,9 @@ python -m cifar10c_vit_m2a \
      --seed 3 \
      --lamb 1.0 \
      --margin 0.0 \
-     --random_masking spectral \
+     --random_masking spatial \
+     --spatial_type patch \
+     --spectral_type all \
      --num_squares 1 \
      --mask_type binary \
      --m 0.1 --n 3 \
@@ -68,7 +70,9 @@ python -m cifar100c_vit_m2a \
      --seed 1 \
      --lamb 1.0 \
      --margin 0.0 \
-     --random_masking spectral \
+     --random_masking spatial \
+     --spatial_type patch \
+     --spectral_type all \
      --num_squares 1 \
      --mask_type binary \
      --m 0.1 --n 3 \
@@ -85,9 +89,9 @@ python -m cifar100c_vit_m2a \
   - CIFAR-100: `data_cifar/cifar100c_vit_m2a.py` loads a checkpoint from `/users/doloriel/work/Repo/M2A/ckpt/pretrain_cifar100.t7`.
   - If your checkpoints are elsewhere, update those paths in the scripts or place the files accordingly.
 - Input size and patch size:
-  - The default input resize is `--size 384` (see `cifar/conf.py`). If using M2A masking, the input size must be divisible by `--patch_size` (e.g., 384 divisible by 8).
+  - The default input resize is `--size 384` (see `data_cifar/conf.py`). If using M2A masking, the input size must be divisible by `--patch_size` (e.g., 384 divisible by 8).
 - Config knobs:
-  - YAMLs under `cifar/cfgs/cifar10/m2a.yaml` and `cifar/cfgs/cifar100/m2a.yaml` set defaults for learning rate, masking schedule (`m`, `n`), and M2A options. CLI flags override the YAML.
+  - YAMLs under `data_cifar/cfgs/cifar10/m2a.yaml` and `data_cifar/cfgs/cifar100/m2a.yaml` set defaults for learning rate, masking schedule (`m`, `n`), and M2A options. CLI flags override the YAML.
 
 ## Acknowledgements
 
