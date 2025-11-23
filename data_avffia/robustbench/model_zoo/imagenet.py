@@ -45,9 +45,9 @@ linf = OrderedDict(
             'preprocessing': 'Res256Crop224'
         }),
         ('Standard_VITB', {
-            'model': lambda: create_model("vit_base_patch16_224", pretrained=True),
+            'model': lambda: create_model("vit_base_patch16_224", pretrained=False),
             'gdrive_id': '',
-            'preprocessing': 'Res256Crop224'
+            'preprocessing': 'Res256Crop224Norm'
         }),
         ('Standard_VITB_MAE', {
             'model': lambda: create_model_mae("vit_base_patch16_224", pretrained=True),
@@ -109,19 +109,19 @@ common_corruptions = OrderedDict(
             'preprocessing': 'Res256Crop224'
         }),
         ('Standard_VITB', {
-            'model': lambda: create_model("vit_base_patch16_224", pretrained=True),
+            'model': lambda: create_model("vit_base_patch16_224", pretrained=False),
             'gdrive_id': '',
-            'preprocessing': 'Res256Crop224'
+            'preprocessing': 'Res256Crop224Norm'
         }),
         ('Standard_VITB_REM', {
-            'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=True),
+            'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=False),
             'gdrive_id': '',
-            'preprocessing': 'Res256Crop224'
+            'preprocessing': 'Res256Crop224Norm'
         }),
         ('Standard_VITB_M2A', {
-            'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=True),
+            'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=False),
             'gdrive_id': '',
-            'preprocessing': 'Res256Crop224'
+            'preprocessing': 'Res256Crop224Norm'
         }),
     ])
 

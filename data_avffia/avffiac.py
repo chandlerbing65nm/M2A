@@ -40,16 +40,6 @@ def evaluate(description):
 
     checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth", map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
-    num_classes_ckpt = None
-    if 'head.weight' in checkpoint:
-        num_classes_ckpt = checkpoint['head.weight'].shape[0]
-    elif 'classifier.weight' in checkpoint:
-        num_classes_ckpt = checkpoint['classifier.weight'].shape[0]
-    if hasattr(base_model, 'head') and hasattr(base_model.head, 'in_features'):
-        in_features = base_model.head.in_features
-        out_features = getattr(base_model.head, 'out_features', None)
-        if num_classes_ckpt is not None and out_features is not None and out_features != num_classes_ckpt:
-            base_model.head = nn.Linear(in_features, num_classes_ckpt)
     base_model.load_state_dict(checkpoint, strict=True)
     del checkpoint
     if cfg.TEST.ckpt is not None:

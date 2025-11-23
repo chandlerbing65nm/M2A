@@ -41,7 +41,7 @@ def safe_model_name(model_name, remove_source=True):
 def _cfg(url='', **kwargs):
     return {
         'url': url,
-        'num_classes': 1000, 'input_size': (3, 224, 224), 'pool_size': None,
+        'num_classes': 4, 'input_size': (3, 224, 224), 'pool_size': None,
         'crop_pct': .9, 'interpolation': 'bicubic', 'fixed_input_size': True,
         'mean': IMAGENET_INCEPTION_MEAN, 'std': IMAGENET_INCEPTION_STD,
         'first_conv': 'patch_embed.proj', 'classifier': 'head',
@@ -51,7 +51,7 @@ def _cfg(url='', **kwargs):
 default_cfgs = {'vit_base_patch16_224': _cfg(
     url='https://storage.googleapis.com/vit_models/augreg/'
         'B_16-i21k-300ep-lr_0.001-aug_medium1-wd_0.1-do_0.0-sd_0.0--imagenet2012-steps_20k-lr_0.01-res_224.npz',
-    input_size=(3, 224, 224), crop_pct=1.0)
+    num_classes=4, input_size=(3, 224, 224), crop_pct=1.0)
 }
 
 

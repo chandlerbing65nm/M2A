@@ -33,7 +33,7 @@ conda activate m2a
 #       --m 0.1 \
 #       --n 3 \
 #       --steps 1 \
-#       --lr 1e-4 \
+#       --lr 1e-7 \
 #       --lamb 1.0 \
 #       --random_masking spatial \
 #       --spatial_type patch \
@@ -43,19 +43,19 @@ conda activate m2a
 #       --disable_erl \
 #       CORRUPTION.NUM_EX 5600
 
-# cd /users/doloriel/work/Repo/M2A/data_avffia
-# python -m avffiac_rem \
-#       --cfg cfgs/vit/rem.yaml \
-#       --data_dir /scratch/project_465002264/datasets/avffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
-#       --seed 1 \
-#       --m 0.1 \
-#       --n 3 \
-#       --steps 1 \
-#       --lr 1e-4 \
-#       --lamb 1.0 \
-#       --disable_eml \
-#       CORRUPTION.NUM_EX 5600
+cd /users/doloriel/work/Repo/M2A/data_avffia
+python -m avffiac_rem \
+      --cfg cfgs/vit/rem.yaml \
+      --data_dir /scratch/project_465002264/datasets/avffia \
+      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
+      --seed 1 \
+      --m 0.1 \
+      --n 3 \
+      --steps 1 \
+      --lr 1e-7 \
+      --lamb 1.0 \
+      --disable_eml \
+      CORRUPTION.NUM_EX 5600
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
 # python -m avffiac \

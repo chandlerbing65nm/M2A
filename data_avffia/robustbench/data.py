@@ -21,11 +21,11 @@ PREPROCESSINGS = {
                                          ]),
                                          #transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          # std=[0.229, 0.224, 0.225])]),
-    # 'Res256Crop224Norm': transforms.Compose([transforms.Resize(256),
-    #                                      transforms.CenterCrop(224),
-    #                                      transforms.ToTensor(),
-    #                                      transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                      std=[0.229, 0.224, 0.225])]),                                   
+    'Res256Crop224Norm': transforms.Compose([transforms.Resize(256),
+                                         transforms.CenterCrop(224),
+                                         transforms.ToTensor(),
+                                         transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])]),                                   
     'Crop288': transforms.Compose([transforms.CenterCrop(288),
                                    transforms.ToTensor()]),
     'none': transforms.Compose([transforms.ToTensor()]),
@@ -223,7 +223,7 @@ def load_avffiac(
     data_dir: str = './data',
     shuffle: bool = False,
     corruptions: Sequence[str] = CORRUPTIONS,
-    prepr: str = 'Res256Crop224'
+    prepr: str = 'Res256Crop224Norm'
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     transforms_test = PREPROCESSINGS[prepr]
 
