@@ -5,47 +5,75 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from robustbench.data import load_avffiacc
-
-from robustbench.model_zoo.rem_vit import create_model_rem
+from robustbench.data import load_avffiac
+from robustbench.model_zoo.enums import ThreatModel
+from robustbench.utils import load_model
+from robustbench.utils import clean_accuracy as accuracy
 
 import m2a
 from conf import cfg, load_cfg_fom_args
 import operators
 
+import numpy as np
+import random
 from tqdm import tqdm
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
-
-def _build_model_from_ckpt(num_classes: int, device: torch.device) -> nn.Module:
-    model = create_model_rem("vit_base_patch16_224", pretrained=False, num_classes=num_classes)
-    ckpt_path = getattr(cfg.TEST, 'ckpt', None)
-    if ckpt_path is None or (isinstance(ckpt_path, str) and ckpt_path.strip() == ""):
-        ckpt_path = "/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth"
-    ckpt = torch.load(ckpt_path, map_location="cpu")
-    state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
-    model.load_state_dict(state, strict=True)
-    model.to(device)
-    return model
-
-
+def rm_substr_from_state_dict(state_dict, substr):
+    new_state_dict = OrderedDict()
+    for key in state_dict.keys():
+        if substr in key:  # to delete prefix 'module.' if it exists
+            new_key = key[len(substr):]
+            new_state_dict[new_key] = state_dict[key]
+        else:
+            new_state_dict[key] = state_dict[key]
+    return new_state_dict
+    
 def evaluate(description):
     args = load_cfg_fom_args(description)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    base_model = _build_model_from_ckpt(num_classes=4, device=device)
+    # configure model
+    base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
+                       cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
+
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth", map_location='cpu')
+    checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
+    num_classes_ckpt = None
+    if 'head.weight' in checkpoint:
+        num_classes_ckpt = checkpoint['head.weight'].shape[0]
+    elif 'classifier.weight' in checkpoint:
+        num_classes_ckpt = checkpoint['classifier.weight'].shape[0]
+    if hasattr(base_model, 'head') and hasattr(base_model.head, 'in_features'):
+        in_features = base_model.head.in_features
+        out_features = getattr(base_model.head, 'out_features', None)
+        if num_classes_ckpt is not None and out_features is not None and out_features != num_classes_ckpt:
+            base_model.head = nn.Linear(in_features, num_classes_ckpt)
+    base_model.load_state_dict(checkpoint, strict=True)
+    del checkpoint
+    if cfg.TEST.ckpt is not None:
+        # make parallel only if CUDA is available
+        if device.type == 'cuda':
+            base_model = torch.nn.DataParallel(base_model)
+        checkpoint = torch.load(cfg.TEST.ckpt, map_location='cpu')
+        base_model.load_state_dict(checkpoint['model'], strict=False)
+    else:
+        if device.type == 'cuda':
+            base_model = torch.nn.DataParallel(base_model)
+
+    base_model.to(device)
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
-    elif cfg.MODEL.ADAPTATION == "M2A":
+    if cfg.MODEL.ADAPTATION == "M2A":
         logger.info("test-time adaptation: M2A")
         model = setup_m2a(base_model)
-    else:
-        logger.info("test-time adaptation: %s not supported, defaulting to NONE", cfg.MODEL.ADAPTATION)
-        model = setup_source(base_model)
-
+    # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
+            # reset adaptation for each combination of corruption x severity
+            # note: for evaluation protocol, but not necessarily needed
             try:
                 if i_x == 0:
                     model.reset()
@@ -53,10 +81,10 @@ def evaluate(description):
                 else:
                     logger.warning(" ")
                     logger.warning("not resetting model")
-            except Exception:
+            except:
                 logger.warning(" ")
                 logger.warning("not resetting model")
-            x_test, y_test = load_avffiacc(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_avffiac(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
             acc, nll, ece, max_softmax, entropy = compute_metrics(

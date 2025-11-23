@@ -54,8 +54,8 @@ class CustomDatasetFolder(VisionDataset):
     """
 
     def __init__(self, root, loader, extensions=None, transform=None, target_transform=None, is_valid_file=None,
-                 path_imgs: str = 'robustbench/data/imagenet_test_image_ids.txt',
-                 cls_dict: str = 'robustbench/data/imagenet_class_to_id_map.json'):
+                 path_imgs: str = 'robustbench/data/avffia_test_image_ids.txt',
+                 cls_dict: str = 'robustbench/data/avffia_class_to_id_map.json'):
         super(CustomDatasetFolder, self).__init__(root)
         self.transform = transform
         self.target_transform = target_transform
@@ -163,8 +163,8 @@ class CustomImageFolder(CustomDatasetFolder):
 
     def __init__(self, root, transform=None, target_transform=None,
                  loader=default_loader, is_valid_file=None,
-                 path_imgs: str = 'robustbench/data/imagenet_test_image_ids.txt',
-                 cls_dict: str = 'robustbench/data/imagenet_class_to_id_map.json'):
+                 path_imgs: str = 'robustbench/data/avffia_test_image_ids.txt',
+                 cls_dict: str = 'robustbench/data/avffia_class_to_id_map.json'):
         super(CustomImageFolder, self).__init__(
             root, loader, IMG_EXTENSIONS if is_valid_file is None else None,
             transform=transform,

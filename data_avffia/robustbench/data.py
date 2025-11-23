@@ -21,7 +21,11 @@ PREPROCESSINGS = {
                                          ]),
                                          #transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          # std=[0.229, 0.224, 0.225])]),
-                                          
+    # 'Res256Crop224Norm': transforms.Compose([transforms.Resize(256),
+    #                                      transforms.CenterCrop(224),
+    #                                      transforms.ToTensor(),
+    #                                      transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                      std=[0.229, 0.224, 0.225])]),                                   
     'Crop288': transforms.Compose([transforms.CenterCrop(288),
                                    transforms.ToTensor()]),
     'none': transforms.Compose([transforms.ToTensor()]),
@@ -94,43 +98,42 @@ def load_imagenet(
     
     return x_test, y_test
 
+# def load_avffiacc(
+#     n_examples: Optional[int] = 5000,
+#     severity: int = 5,
+#     data_dir: str = './data',
+#     shuffle: bool = False,
+#     corruptions: Optional[Sequence[str]] = None,
+#     prepr: str = 'Res256Crop224'
+# ) -> Tuple[torch.Tensor, torch.Tensor]:
+#     # Use ImageNet normalization since the fine-tuned model expects it
+#     mean = [0.485, 0.456, 0.406]
+#     std = [0.229, 0.224, 0.225]
+#     transforms_test = transforms.Compose([
+#         transforms.Resize(256),
+#         transforms.CenterCrop(224),
+#         transforms.ToTensor(),
+#         transforms.Normalize(mean=mean, std=std),
+#     ])
 
-def load_avffiacc(
-    n_examples: Optional[int] = 5000,
-    severity: int = 5,
-    data_dir: str = './data',
-    shuffle: bool = False,
-    corruptions: Optional[Sequence[str]] = None,
-    prepr: str = 'Res256Crop224'
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    # Use ImageNet normalization since the fine-tuned model expects it
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
-    transforms_test = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std),
-    ])
+#     if corruptions is None:
+#         corruptions = CORRUPTIONS
 
-    if corruptions is None:
-        corruptions = CORRUPTIONS
+#     assert len(corruptions) == 1, "only one corruption is supported per call"
+#     data_folder_path = Path(data_dir) / 'AVFFIA-C' / corruptions[0] / str(severity)
+#     imagenet = CustomImageFolder(
+#         data_folder_path,
+#         transforms_test,
+#         path_imgs='robustbench/data/avffia_test_image_ids.txt',
+#         cls_dict='robustbench/data/avffia_class_to_id_map.json',
+#     )
 
-    assert len(corruptions) == 1, "only one corruption is supported per call"
-    data_folder_path = Path(data_dir) / 'AVFFIA-C' / corruptions[0] / str(severity)
-    imagenet = CustomImageFolder(
-        data_folder_path,
-        transforms_test,
-        path_imgs='robustbench/data/avffia_test_image_ids.txt',
-        cls_dict='robustbench/data/avffia_class_to_id_map.json',
-    )
+#     test_loader = data.DataLoader(imagenet, batch_size=n_examples,
+#                                   shuffle=shuffle, num_workers=2)
 
-    test_loader = data.DataLoader(imagenet, batch_size=n_examples,
-                                  shuffle=shuffle, num_workers=2)
+#     x_test, y_test, paths = next(iter(test_loader))
 
-    x_test, y_test, paths = next(iter(test_loader))
-
-    return x_test, y_test
+#     return x_test, y_test
 
 
 CleanDatasetLoader = Callable[[Optional[int], str], Tuple[torch.Tensor,
@@ -160,7 +163,8 @@ ZENODO_CORRUPTIONS_LINKS: Dict[BenchmarkDataset, Tuple[str, Set[str]]] = {
 CORRUPTIONS_DIR_NAMES: Dict[BenchmarkDataset, str] = {
     BenchmarkDataset.cifar_10: "CIFAR-10-C",
     BenchmarkDataset.cifar_100: "CIFAR-100-C",
-    BenchmarkDataset.imagenet: "ImageNet-C"
+    BenchmarkDataset.imagenet: "ImageNet-C",
+    BenchmarkDataset.avffia: "AVFFIA-C"
 }
 
 
@@ -213,14 +217,39 @@ def load_imagenetc(
 
     return x_test, y_test
 
+def load_avffiac(
+    n_examples: Optional[int] = 5000,
+    severity: int = 5,
+    data_dir: str = './data',
+    shuffle: bool = False,
+    corruptions: Sequence[str] = CORRUPTIONS,
+    prepr: str = 'Res256Crop224'
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    transforms_test = PREPROCESSINGS[prepr]
+
+    assert len(corruptions) == 1, "so far only one corruption is supported (that's how this function is called in eval.py"
+    # TODO: generalize this (although this would probably require writing a function similar to `load_corruptions_cifar`
+    #  or alternatively creating yet another CustomImageFolder class that fetches images from multiple corruption types
+    #  at once -- perhaps this is a cleaner solution)
+
+    data_folder_path = Path(data_dir) / CORRUPTIONS_DIR_NAMES[BenchmarkDataset.avffia] / corruptions[0] / str(severity)
+    avffia = CustomImageFolder(data_folder_path, transforms_test)
+
+    test_loader = data.DataLoader(avffia, batch_size=n_examples,
+                                  shuffle=shuffle, num_workers=2)
+
+    x_test, y_test, paths = next(iter(test_loader))
+
+    return x_test, y_test
 
 CorruptDatasetLoader = Callable[[int, int, str, bool, Sequence[str]],
                                 Tuple[torch.Tensor, torch.Tensor]]
+
 CORRUPTION_DATASET_LOADERS: Dict[BenchmarkDataset, CorruptDatasetLoader] = {
     BenchmarkDataset.cifar_10: load_cifar10c,
     BenchmarkDataset.cifar_100: load_cifar100c,
     BenchmarkDataset.imagenet: load_imagenetc,
-    BenchmarkDataset.avffia: load_avffiacc,
+    BenchmarkDataset.avffia: load_avffiac,
 }
 
 

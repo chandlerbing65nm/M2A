@@ -1,5 +1,5 @@
 
-# Mask to Adapt — Simple Random Masking Surprisingly Enables Robust Continual Test-Time Learning
+# Mask to Adapt: Simple Random Masking Surprisingly Enables Robust Continual Test-Time Learning
 
 This repository contains code for M2A (Mask to Adapt).
   

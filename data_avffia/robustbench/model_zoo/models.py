@@ -13,5 +13,6 @@ BenchmarkDict = OrderedDictType[BenchmarkDataset, ThreatModelsDict]
 model_dicts: BenchmarkDict = OrderedDict([
     (BenchmarkDataset.cifar_10, cifar_10_models),
     (BenchmarkDataset.cifar_100, cifar_100_models),
-    (BenchmarkDataset.imagenet, imagenet_models)
+    (BenchmarkDataset.imagenet, imagenet_models),
+    (BenchmarkDataset.avffia, imagenet_models),
 ])
