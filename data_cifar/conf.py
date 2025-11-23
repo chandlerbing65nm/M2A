@@ -176,6 +176,8 @@ _C.M2A = CfgNode()
 _C.M2A.RANDOM_MASKING = 'spatial'
 _C.M2A.NUM_SQUARES = 1
 _C.M2A.MASK_TYPE = 'binary'  # choices: 'binary', 'gaussian', 'mean'
+_C.M2A.SPATIAL_TYPE = 'patch'  # choices: 'patch','pixel'
+_C.M2A.SPECTRAL_TYPE = 'all'   # choices: 'all','low','high'
 _C.M2A.PLOT_LOSS = False
 _C.M2A.PLOT_LOSS_PATH = ""
 _C.M2A.PLOT_EMA_ALPHA = 0.98
@@ -286,6 +288,10 @@ def load_cfg_fom_args(description="Config options."):
                         help="Number of equal-size squares to place per masking level (default from cfg)")
     parser.add_argument("--mask_type", type=str, default=None, choices=['binary', 'gaussian', 'mean'],
                         help="How to fill masked regions: 'binary' (zero), 'gaussian' (blurred), or 'mean' (per-image mean)")
+    parser.add_argument("--spatial_type", type=str, default=None, choices=['patch','pixel'],
+                        help="When random_masking=spatial: 'patch' (squares) or 'pixel' (random pixels)")
+    parser.add_argument("--spectral_type", type=str, default=None, choices=['all','low','high'],
+                        help="When random_masking=spectral: 'all' (any bins), 'low' (top-left quadrant), 'high' (rest)")
     # (Removed M2A pruning CLI options)
     # M2A plotting CLI options
     parser.add_argument("--plot_loss", action="store_true",
@@ -377,6 +383,10 @@ def load_cfg_fom_args(description="Config options."):
         cfg.M2A.NUM_SQUARES = max(1, int(args.num_squares))
     if args.mask_type is not None:
         cfg.M2A.MASK_TYPE = str(args.mask_type).lower()
+    if args.spatial_type is not None:
+        cfg.M2A.SPATIAL_TYPE = args.spatial_type.lower()
+    if args.spectral_type is not None:
+        cfg.M2A.SPECTRAL_TYPE = args.spectral_type.lower()
     # Plotting options
     if args.plot_loss:
         cfg.M2A.PLOT_LOSS = True

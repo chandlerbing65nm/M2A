@@ -52,7 +52,7 @@ def gaussian_blur2d(x: torch.Tensor, kernel_size: int = 11, sigma: float = None)
     return F.conv2d(x, kernel, bias=None, stride=1, padding=padding, groups=C)
 
 
-def apply_frequency_mask(x: torch.Tensor, mask_percent: float) -> torch.Tensor:
+def apply_frequency_mask(x: torch.Tensor, mask_percent: float, spectral_type: str = 'all') -> torch.Tensor:
     mask_percent = float(mask_percent)
     mask_percent = max(0.0, min(100.0, mask_percent))
     B, C, H, W = x.shape
@@ -64,12 +64,36 @@ def apply_frequency_mask(x: torch.Tensor, mask_percent: float) -> torch.Tensor:
     if k <= 0:
         X_masked = X
     else:
-        mask = torch.ones((B, 1, H, W), device=x.device, dtype=X.dtype)
-        flat = mask.view(B, -1)
-        for i in range(B):
-            idx = torch.randperm(total_bins, device=x.device)[:k]
-            flat[i, idx] = 0
-        mask = flat.view(B, 1, H, W)
+        st = str(spectral_type).lower()
+        if st not in ['all', 'low', 'high']:
+            st = 'all'
+        base_mask = torch.ones((H, W), device=x.device, dtype=X.dtype)
+        if st == 'all':
+            allowed = torch.ones((H, W), device=x.device, dtype=torch.bool)
+        else:
+            h2 = H // 2
+            w2 = W // 2
+            if st == 'low':
+                allowed = torch.zeros((H, W), device=x.device, dtype=torch.bool)
+                allowed[:h2, :w2] = True
+            else:
+                allowed = torch.ones((H, W), device=x.device, dtype=torch.bool)
+                allowed[:h2, :w2] = False
+        allowed_idx = allowed.view(-1).nonzero().squeeze(1)
+        max_choose = int(allowed_idx.numel())
+        choose_k = min(k, max_choose)
+        mask_batch = []
+        for _ in range(B):
+            if choose_k > 0:
+                perm = torch.randperm(max_choose, device=x.device)[:choose_k]
+                pick = allowed_idx[perm]
+                flat = base_mask.new_ones((H * W,))
+                flat[pick] = 0
+                mask_i = flat.view(1, H, W)
+            else:
+                mask_i = base_mask.view(1, H, W)
+            mask_batch.append(mask_i)
+        mask = torch.stack(mask_batch, dim=0)
         X_masked = X * mask
     x_rec = torch.fft.ifft2(X_masked, dim=(-2, -1), norm='ortho').real
     x_rec = x_rec.clamp(0.0, 1.0)
@@ -126,7 +150,8 @@ def _forward_logits(model: nn.Module, x: torch.Tensor) -> torch.Tensor:
 
 class M2A(nn.Module):
     def __init__(self, model, optimizer, steps=1, episodic=False, m=0.1, n=3, lamb=1.0, margin=0.0,
-                 random_masking: str = 'spatial', num_squares: int = 1, mask_type: str = 'binary', seed: int = None,
+                 random_masking: str = 'spatial', num_squares: int = 1, mask_type: str = 'binary',
+                 spatial_type: str = 'patch', spectral_type: str = 'all', seed: int = None,
                  disable_mcl: bool = False, disable_erl: bool = False, disable_eml: bool = False):
         super().__init__()
         self.model = model
@@ -152,6 +177,10 @@ class M2A(nn.Module):
         self.num_squares = max(1, int(num_squares))
         mt = str(mask_type).lower()
         self.mask_type = mt if mt in ['binary', 'gaussian', 'mean'] else 'binary'
+        st_sp = str(spatial_type).lower()
+        self.spatial_type = st_sp if st_sp in ['patch', 'pixel'] else 'patch'
+        st_spec = str(spectral_type).lower()
+        self.spectral_type = st_spec if st_spec in ['all', 'low', 'high'] else 'all'
         self._rng = torch.Generator(device='cpu')
         try:
             if seed is not None:
@@ -184,18 +213,39 @@ class M2A(nn.Module):
             if self.random_masking == 'spatial':
                 xb = x.clone()
                 x_blur = gaussian_blur2d(xb, kernel_size=11, sigma=None) if self.mask_type == 'gaussian' else None
-                for bi in range(B):
-                    mask_bw = build_random_square_mask(H, W, ratio=mfrac, num_squares=self.num_squares, generator=self._rng).to(x.device)
-                    mask_c = mask_bw.unsqueeze(0)
-                    if self.mask_type == 'binary':
-                        xb[bi] = x[bi] * (1.0 - mask_c)
-                    elif self.mask_type == 'mean':
-                        mean_val = x[bi].mean(dim=(1, 2), keepdim=True)
-                        xb[bi] = x[bi] * (1.0 - mask_c) + mean_val * mask_c
-                    elif self.mask_type == 'gaussian':
-                        xb[bi] = x[bi] * (1.0 - mask_c) + x_blur[bi] * mask_c
+                if self.spatial_type == 'patch':
+                    for bi in range(B):
+                        mask_bw = build_random_square_mask(H, W, ratio=mfrac, num_squares=self.num_squares, generator=self._rng).to(x.device)
+                        mask_c = mask_bw.unsqueeze(0)
+                        if self.mask_type == 'binary':
+                            xb[bi] = x[bi] * (1.0 - mask_c)
+                        elif self.mask_type == 'mean':
+                            mean_val = x[bi].mean(dim=(1, 2), keepdim=True)
+                            xb[bi] = x[bi] * (1.0 - mask_c) + mean_val * mask_c
+                        elif self.mask_type == 'gaussian':
+                            xb[bi] = x[bi] * (1.0 - mask_c) + x_blur[bi] * mask_c
+                else:
+                    total_pixels = H * W
+                    k_pix = int(round(mfrac * total_pixels))
+                    k_pix = max(0, min(k_pix, total_pixels))
+                    for bi in range(B):
+                        if k_pix > 0:
+                            flat = torch.zeros((total_pixels,), device=x.device, dtype=torch.float32)
+                            idx = torch.randperm(total_pixels, device=x.device)[:k_pix]
+                            flat[idx] = 1.0
+                            mask_bw = flat.view(H, W)
+                        else:
+                            mask_bw = torch.zeros((H, W), device=x.device, dtype=torch.float32)
+                        mask_c = mask_bw.unsqueeze(0)
+                        if self.mask_type == 'binary':
+                            xb[bi] = x[bi] * (1.0 - mask_c)
+                        elif self.mask_type == 'mean':
+                            mean_val = x[bi].mean(dim=(1, 2), keepdim=True)
+                            xb[bi] = x[bi] * (1.0 - mask_c) + mean_val * mask_c
+                        elif self.mask_type == 'gaussian':
+                            xb[bi] = x[bi] * (1.0 - mask_c) + x_blur[bi] * mask_c
             else:
-                xb = apply_frequency_mask(x, mask_percent=(mfrac * 100.0))
+                xb = apply_frequency_mask(x, mask_percent=(mfrac * 100.0), spectral_type=self.spectral_type)
 
             out_m = _forward_logits(self.model, xb)
             outputs_list.append(out_m)

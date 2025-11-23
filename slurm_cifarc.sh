@@ -37,6 +37,8 @@ python -m cifar100c_vit_m2a \
      --lamb 1.0 \
      --margin 0.0 \
      --random_masking spatial \
+     --spatial_type patch \
+     --spectral_type all \
      --num_squares 1 \
      --mask_type binary \
      --m 0.1 --n 3 \
@@ -54,6 +56,8 @@ python -m cifar100c_vit_m2a \
 #      --lamb 1.0 \
 #      --margin 0.0 \
 #      --random_masking spatial \
+#      --spatial_type patch \
+#      --spectral_type all \
 #      --num_squares 1 \
 #      --mask_type binary \
 #      --m 0.1 --n 3 \

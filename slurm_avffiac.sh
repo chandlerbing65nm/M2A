@@ -33,9 +33,11 @@ python -m avffiac_m2a \
       --m 0.1 \
       --n 3 \
       --steps 1 \
-      --lr 1e-5 \
+      --lr 1e-4 \
       --lamb 1.0 \
       --random_masking spatial \
+      --spatial_type patch \
+      --spectral_type all \
       --num_squares 1 \
       --mask_type binary \
       --disable_erl \
@@ -50,7 +52,7 @@ python -m avffiac_m2a \
 #       --m 0.1 \
 #       --n 3 \
 #       --steps 1 \
-#       --lr 1e-5 \
+#       --lr 1e-4 \
 #       --lamb 1.0 \
 #       --disable_eml \
 #       CORRUPTION.NUM_EX 5600

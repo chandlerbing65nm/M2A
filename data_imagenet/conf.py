@@ -160,6 +160,8 @@ _C.M2A = CfgNode()
 _C.M2A.RANDOM_MASKING = 'spatial'   # choices: 'spatial','spectral'
 _C.M2A.NUM_SQUARES = 1              # used when RANDOM_MASKING='spatial'
 _C.M2A.MASK_TYPE = 'binary'         # choices: 'binary','gaussian','mean'
+_C.M2A.SPATIAL_TYPE = 'patch'       # choices: 'patch','pixel'
+_C.M2A.SPECTRAL_TYPE = 'all'        # choices: 'all','low','high'
 _C.M2A.DISABLE_MCL = False
 _C.M2A.DISABLE_ERL = False
 _C.M2A.DISABLE_EML = False
@@ -225,6 +227,12 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--mask_type", type=str, default=None,
                         choices=['binary','gaussian','mean'],
                         help="Mask fill type: binary (zeros), gaussian blur, or per-image mean")
+    parser.add_argument("--spatial_type", type=str, default=None,
+                        choices=['patch','pixel'],
+                        help="When random_masking=spatial: 'patch' (squares) or 'pixel' (random pixels)")
+    parser.add_argument("--spectral_type", type=str, default=None,
+                        choices=['all','low','high'],
+                        help="When random_masking=spectral: 'all' (any bins), 'low' (top-left quadrant), 'high' (rest)")
     parser.add_argument("--disable_mcl", action="store_true",
                         help="Disable the Mask Consistency Loss (MCL) term")
     parser.add_argument("--disable_erl", action="store_true",
@@ -255,6 +263,10 @@ def load_cfg_fom_args(description="Config options."):
             pass
     if args.mask_type is not None:
         cfg.M2A.MASK_TYPE = args.mask_type.lower()
+    if getattr(args, 'spatial_type', None) is not None:
+        cfg.M2A.SPATIAL_TYPE = args.spatial_type.lower()
+    if getattr(args, 'spectral_type', None) is not None:
+        cfg.M2A.SPECTRAL_TYPE = args.spectral_type.lower()
     if args.disable_mcl:
         cfg.M2A.DISABLE_MCL = True
     if args.disable_erl:

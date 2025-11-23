@@ -108,6 +108,8 @@ def setup_m2a(model):
         random_masking=cfg.M2A.RANDOM_MASKING,
         num_squares=cfg.M2A.NUM_SQUARES,
         mask_type=cfg.M2A.MASK_TYPE,
+        spatial_type=cfg.M2A.SPATIAL_TYPE,
+        spectral_type=cfg.M2A.SPECTRAL_TYPE,
         seed=cfg.RNG_SEED,
         disable_mcl=cfg.M2A.DISABLE_MCL,
         disable_erl=cfg.M2A.DISABLE_ERL,
