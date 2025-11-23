@@ -110,11 +110,22 @@ def load_model(model_name: str,
     model_path = model_dir_ / f'{model_name}.pt'
     models = all_models[dataset_][threat_model_]
 
+    # Force native timm ViT for CIFAR-10 Standard_VITB to avoid custom REM ViT class
+    if dataset_ == BenchmarkDataset.cifar_10 and model_name == 'Standard_VITB':
+        try:
+            from timm.models.vision_transformer import vit_base_patch16_384 as _vit_b16_384
+            from torch import nn as _nn
+            m = _vit_b16_384(pretrained=False)
+            if hasattr(m, 'head') and isinstance(m.head, _nn.Linear):
+                m.head = _nn.Linear(m.head.in_features, 10)
+            return m.eval()
+        except Exception:
+            pass
+
     if not isinstance(models[model_name]['gdrive_id'], list):
         model = models[model_name]['model']()
-#        if dataset_ == BenchmarkDataset.imagenet and 'Standard' in model_name:
-        if True:
-            return model.eval()
+        # Early return in this fork to bypass gdrive downloads for local usage
+        return model.eval()
         if not os.path.exists(model_dir_):
             os.makedirs(model_dir_)
         if not os.path.isfile(model_path):

@@ -44,7 +44,7 @@ python -m avffiac_m2a \
       CORRUPTION.NUM_EX 5600
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
-# python -m avffiac \
+# python -m avffiac_rem \
 #       --cfg cfgs/vit/rem.yaml \
 #       --data_dir /scratch/project_465002264/datasets/avffia \
 #       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
@@ -56,3 +56,11 @@ python -m avffiac_m2a \
 #       --lamb 1.0 \
 #       --disable_eml \
 #       CORRUPTION.NUM_EX 5600
+
+cd /users/doloriel/work/Repo/M2A/data_avffia
+python -m avffiac \
+      --cfg cfgs/vit/source.yaml \
+      --data_dir /scratch/project_465002264/datasets/avffia \
+      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
+      --seed 1 \
+      CORRUPTION.NUM_EX 5600

@@ -37,7 +37,7 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
-    elif cfg.MODEL.ADAPTATION == "REM":
+    elif cfg.MODEL.ADAPTATION == "M2A":
         logger.info("test-time adaptation: M2A")
         model = setup_m2a(base_model)
     else:

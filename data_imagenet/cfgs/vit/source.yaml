@@ -2,7 +2,7 @@ MODEL:
   ADAPTATION: source
   ARCH: Standard_VITB
 TEST:
-  BATCH_SIZE: 64
+  BATCH_SIZE: 50
 CORRUPTION:
   DATASET: imagenet
   SEVERITY:

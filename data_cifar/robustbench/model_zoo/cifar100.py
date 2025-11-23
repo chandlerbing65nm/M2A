@@ -267,7 +267,10 @@ common_corruptions = OrderedDict([
     'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=True)),
     'gdrive_id': '',
     }),
-
+    ('Standard_VITB_M2A', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=True)),
+    'gdrive_id': '',
+    }),
 ])
 
 cifar_100_models = OrderedDict([(ThreatModel.Linf, linf),

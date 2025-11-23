@@ -138,10 +138,42 @@ def compute_metrics(model: nn.Module,
             end = min((b + 1) * batch_size, total_N)
             x_b = x[start:end].to(device)
             y_b = y[start:end].to(device)
+            if b == 0:
+                try:
+                    sample_lbl = y_b[0][:5].tolist() if y_b.ndim > 1 else y_b[:5].tolist()
+                except Exception:
+                    sample_lbl = 'n/a'
+                # print(f"[debug] batch={b} x_b shape={tuple(x_b.shape)} dtype={x_b.dtype} device={x_b.device}")
+                # print(f"[debug] batch={b} y_b RAW shape={tuple(y_b.shape)} dtype={y_b.dtype} sample={sample_lbl}")
+            if y_b.ndim > 1:
+                y_b = y_b.argmax(dim=-1)
+            y_b = y_b.long().view(-1)
+            if b == 0:
+                try:
+                    y_stats = (int(y_b.min().item()), int(y_b.max().item())) if y_b.numel() > 0 else ('n/a','n/a')
+                except Exception:
+                    y_stats = ('n/a','n/a')
+                # print(f"[debug] batch={b} y_b IDX shape={tuple(y_b.shape)} dtype={y_b.dtype} minmax={y_stats}")
 
             logits = model(x_b)
-            preds = logits.argmax(dim=1)
-            correct += (preds == y_b).float().sum().item()
+            # if b == 0:
+            #     print(f"[debug] batch={b} logits shape={tuple(logits.shape)} dtype={logits.dtype}")
+            if logits.ndim == 3:
+                if logits.shape[1] > 1:
+                    logits = logits[:, 0, :]
+                else:
+                    logits = logits.squeeze(1)
+                # if b == 0:
+                #     print(f"[debug] batch={b} logits POST-CLS shape={tuple(logits.shape)} dtype={logits.dtype}")
+            preds = logits.argmax(dim=-1)
+            # if b == 0:
+            #     print(f"[debug] batch={b} preds shape={tuple(preds.shape)} dtype={preds.dtype}")
+            try:
+                eq = (preds == y_b)
+            except Exception as e:
+                # print(f"[debug] EQ ERROR: preds shape={tuple(preds.shape)} y_b shape={tuple(y_b.shape)}")
+                raise ValueError(e)
+            correct += eq.float().sum().item()
             total_eval += y_b.shape[0]
 
             nll_sum += F.cross_entropy(logits, y_b, reduction='sum').item()

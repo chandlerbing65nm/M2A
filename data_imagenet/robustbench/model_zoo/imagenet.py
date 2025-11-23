@@ -4,7 +4,8 @@ from torchvision import models as pt_models
 
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.model_zoo.architectures.utils_architectures import normalize_model
-from .rem_vit import create_model_rem as create_model_rem
+from .rem_vit import create_model_rem
+from .vit import create_model
 
 import timm
 mu = (0.485, 0.456, 0.406)
@@ -44,7 +45,7 @@ linf = OrderedDict(
             'preprocessing': 'Res256Crop224'
         }),
         ('Standard_VITB', {
-            'model': lambda: timm.create_model("vit_base_patch16_224", pretrained=True),
+            'model': lambda: create_model("vit_base_patch16_224", pretrained=True),
             'gdrive_id': '',
             'preprocessing': 'Res256Crop224'
         }),
@@ -108,11 +109,16 @@ common_corruptions = OrderedDict(
             'preprocessing': 'Res256Crop224'
         }),
         ('Standard_VITB', {
-            'model': lambda: timm.create_model("vit_base_patch16_224", pretrained=True),
+            'model': lambda: create_model("vit_base_patch16_224", pretrained=True),
             'gdrive_id': '',
             'preprocessing': 'Res256Crop224'
         }),
         ('Standard_VITB_REM', {
+            'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=True),
+            'gdrive_id': '',
+            'preprocessing': 'Res256Crop224'
+        }),
+        ('Standard_VITB_M2A', {
             'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=True),
             'gdrive_id': '',
             'preprocessing': 'Res256Crop224'

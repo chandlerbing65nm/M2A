@@ -65,7 +65,7 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE (source)")
         model = setup_source(base_model)
-    elif cfg.MODEL.ADAPTATION == "REM":
+    elif cfg.MODEL.ADAPTATION == "M2A":
         logger.info("test-time adaptation: M2A")
         model = setup_m2a(base_model)
     else:
@@ -109,7 +109,7 @@ def evaluate(description):
                                            [corruption_type])
             x_test = F.interpolate(x_test, size=(args.size, args.size),
                                    mode='bilinear', align_corners=False)
-            # No divisibility requirement for spatial masking (pixel-level squares)
+            # No divisibility requim2aent for spatial masking (pixel-level squares)
             # Compute metrics (acc, nll, ece, max-softmax, entropy)
             # No directional metrics reset; focusing on standard/confidence metrics
 
@@ -375,7 +375,7 @@ def setup_m2a(model):
         logger.info(f"[setup_m2a] optimizer: {optimizer.__class__.__name__}, lrs={lrs}")
     except Exception:
         pass
-    rem_model = m2a.M2A(
+    m2a_model = m2a.M2A(
         model, optimizer,
         steps=cfg.OPTIM.STEPS,
         episodic=cfg.MODEL.EPISODIC,
@@ -408,7 +408,7 @@ def setup_m2a(model):
         
     )
     logger.info(f"optimizer for adaptation: %s", optimizer)
-    return rem_model
+    return m2a_model
 
 if __name__ == '__main__':
     evaluate('CIFAR-10-C evaluation with M2A: Stochastic Patch Erasing with Adaptive Residual Correction for Continual Test-Time Adaptation.')

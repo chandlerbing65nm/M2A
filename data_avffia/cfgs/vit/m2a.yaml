@@ -19,8 +19,8 @@ CORRUPTION:
     - pixelate
     - jpeg_compression
 MODEL:
-  ADAPTATION: REM
-  ARCH: Standard_VITB_REM   # VIT: Standard_VITB  CNN: Standard
+  ADAPTATION: M2A
+  ARCH: Standard_VITB_M2A   # VIT: Standard_VITB  CNN: Standard
 OPTIM:
   BETA: 0.9
   LR: 1e-5

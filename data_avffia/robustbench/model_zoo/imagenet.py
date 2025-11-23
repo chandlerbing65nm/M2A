@@ -117,6 +117,11 @@ common_corruptions = OrderedDict(
             'gdrive_id': '',
             'preprocessing': 'Res256Crop224'
         }),
+        ('Standard_VITB_M2A', {
+            'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=True),
+            'gdrive_id': '',
+            'preprocessing': 'Res256Crop224'
+        }),
     ])
 
 imagenet_models = OrderedDict([(ThreatModel.Linf, linf),

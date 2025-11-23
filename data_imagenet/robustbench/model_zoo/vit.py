@@ -4,8 +4,8 @@ import logging
 import math
 
 import torch.nn.functional as F
-from .vision_transformer_rem import VisionTransformer as VisionTransformer_REM
-from timm.models.vision_transformer import VisionTransformer
+from .vision_transformer_rem import VisionTransformer
+# from timm.models.vision_transformer import VisionTransformer
 from timm.models.registry import is_model, is_model_in_modules
 from timm.models.helpers import load_checkpoint
 from timm.models.layers import set_layer_config
@@ -96,7 +96,7 @@ def checkpoint_filter_fn(state_dict, model):
     return out_dict
 
 
-def _create_vision_transformer_rem(variant, pretrained=False, default_cfg=None, **kwargs):
+def _create_vision_transformer(variant, pretrained=False, default_cfg=None, **kwargs):
     default_cfg = default_cfg or default_cfgs[variant]
     if kwargs.get('features_only', None):
         raise RuntimeError('features_only not implemented for Vision Transformer models.')
@@ -113,7 +113,7 @@ def _create_vision_transformer_rem(variant, pretrained=False, default_cfg=None, 
     is_npz = 'npz' in default_cfg.get('url', '')
     if is_npz:
         model = build_model_with_cfg(
-            vit_rem, variant, False,
+            VisionTransformer, variant, False,
             default_cfg=default_cfg,
             representation_size=repr_size,
             pretrained_filter_fn=checkpoint_filter_fn,
@@ -129,7 +129,7 @@ def _create_vision_transformer_rem(variant, pretrained=False, default_cfg=None, 
         return model
     else:
         model = build_model_with_cfg(
-            vit_rem, variant, pretrained,
+            VisionTransformer, variant, pretrained,
             default_cfg=default_cfg,
             representation_size=repr_size,
             pretrained_filter_fn=checkpoint_filter_fn,
@@ -137,16 +137,16 @@ def _create_vision_transformer_rem(variant, pretrained=False, default_cfg=None, 
         return model
 
 
-def vit_base_patch16_224_rem(pretrained=False, **kwargs):
+def vit_base_patch16_224(pretrained=False, **kwargs):
     """ ViT-Base model (ViT-B/16) from original paper (https://arxiv.org/abs/2010.11929).
     ImageNet-1k weights fine-tuned from in21k @ 384x384, source https://github.com/google-research/vision_transformer.
     """
     model_kwargs = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12, **kwargs)
-    model = _create_vision_transformer_rem('vit_base_patch16_224', pretrained=pretrained, **model_kwargs)
+    model = _create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **model_kwargs)
     return model
 
 
-def create_model_rem(
+def create_model(
         model_name,
         pretrained=False,
         checkpoint_path='',
@@ -197,54 +197,10 @@ def create_model_rem(
         kwargs['external_default_cfg'] = hf_default_cfg  # FIXME revamp default_cfg interface someday
 
     with set_layer_config(scriptable=scriptable, exportable=exportable, no_jit=no_jit):
-        model = vit_base_patch16_224_rem(pretrained=pretrained, **kwargs)
+        model = vit_base_patch16_224(pretrained=pretrained, **kwargs)
 
     if checkpoint_path:
         load_checkpoint(model, checkpoint_path)
 
     return model
-
-class vit_rem(VisionTransformer_REM):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def forward_features(self, x, len_keep=None, return_attn=False):
-        x = self.patch_embed(x)
-        B, N, _ = x.shape
-        device = x.device
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)
-        x = torch.cat((cls_token, x), dim=1)
-        x = x + self.pos_embed
-
-        if len_keep is not None:
-            B, _, D = x.shape  # batch, length, dim
-            cls_save = x[:, 0, :].unsqueeze(dim=1)
-            x = x[:, 1:, :]
-            x = torch.gather(x, dim=1, index=len_keep.unsqueeze(-1).repeat(1, 1, D))
-            x = torch.cat((cls_save, x), dim=1)
-
-        x = self.pos_drop(x)
-
-        for i, blk in enumerate(self.blocks):
-            if i < len(self.blocks) - 1:
-                x = blk(x)
-            else:
-                x, attn = blk(x, return_attn=True)
-
-        x = self.norm(x)
-        if return_attn:
-            return x, attn
-        else:
-            return x
-
-    def forward(self, x, len_keep=None, return_attn=False):
-        if return_attn is True:
-            feat, attn = self.forward_features(x, len_keep, True)
-            x = self.head(feat[:,0])
-            return x, attn
-        else:
-            feat = self.forward_features(x, len_keep, False)
-            x = self.head(feat[:,0])
-            return x
-
 

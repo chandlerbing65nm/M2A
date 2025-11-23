@@ -38,7 +38,7 @@ python -m imagenetc_m2a \
       CORRUPTION.NUM_EX 5000
 
 # cd /users/doloriel/work/Repo/M2A/data_imagenet
-# python -m imagenetc \
+# python -m imagenetc_rem \
 #       --cfg cfgs/vit/rem.yaml \
 #       --data_dir /scratch/project_465002264/datasets/imagenetc \
 #       CORRUPTION.NUM_EX 5000

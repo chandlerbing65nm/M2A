@@ -1,6 +1,6 @@
 MODEL:
-  ADAPTATION: REM
-  ARCH: Standard_VITB_REM   # VIT: Standard_VITB  CNN: Standard
+  ADAPTATION: M2A
+  ARCH: Standard_VITB_M2A   # VIT: Standard_VITB  CNN: Standard
   LN_QUARTER: default       # LayerNorm adaptation scope: default|q1|q2|q3|q4|all
 TEST:
   BATCH_SIZE: 20

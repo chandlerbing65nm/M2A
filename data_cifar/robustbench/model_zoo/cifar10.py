@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 import timm
+from timm.models.vision_transformer import vit_base_patch16_384 as timm_vit_base_patch16_384
 from robustbench.model_zoo.architectures.dm_wide_resnet import CIFAR10_MEAN, CIFAR10_STD, \
     DMWideResNet, Swish, DMPreActResNet
 from robustbench.model_zoo.architectures.resnet import Bottleneck, BottleneckChen2020AdversarialNet, \
@@ -690,7 +691,7 @@ l2 = OrderedDict([
         'gdrive_id': '1t98aEuzeTL8P7Kpd5DIrCoCL21BNZUhC',
     }),
     ('Standard_VITB', {
-    'model': lambda: modify_head(timm.create_model("vit_base_patch16_384", pretrained=True)),
+    'model': lambda: modify_head(timm_vit_base_patch16_384(pretrained=False)),
     'gdrive_id': '',
     }),
 ])
@@ -748,11 +749,15 @@ common_corruptions = OrderedDict([
         'gdrive_id': '1t98aEuzeTL8P7Kpd5DIrCoCL21BNZUhC',
     }),
     ('Standard_VITB', {
-    'model': lambda: modify_head(timm.create_model("vit_base_patch16_384", pretrained=True)),
+    'model': lambda: modify_head(timm.create_model("vit_base_patch16_384", pretrained=False)),
     'gdrive_id': '',
     }),
     ('Standard_VITB_REM', {
-    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=True)),
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_M2A', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=False)),
     'gdrive_id': '',
     }),
 ])

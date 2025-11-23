@@ -1,8 +1,8 @@
 import logging
 
 import torch
-import torch.optim as optim
 import torch.nn as nn
+import torch.optim as optim
 import torch.nn.functional as F
 
 from robustbench.data import load_imagenetc
@@ -10,7 +10,7 @@ from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
 
-import m2a
+import rem
 from conf import cfg, load_cfg_fom_args
 import operators
 
@@ -30,9 +30,9 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
-    if cfg.MODEL.ADAPTATION == "M2A":
-        logger.info("test-time adaptation: M2A")
-        model = setup_m2a(base_model)
+    if cfg.MODEL.ADAPTATION == "REM":
+        logger.info("test-time adaptation: REM")
+        model = setup_rem(base_model)
     # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -68,7 +68,7 @@ def setup_source(model):
     return model
 
     
-def setup_optimizer_m2a(params):
+def setup_optimizer_rem(params):
     """Set up optimizer for tent adaptation.
 
     Tent needs an optimizer for test-time entropy minimization.
@@ -94,31 +94,22 @@ def setup_optimizer_m2a(params):
     else:
         raise NotImplementedError
 
-def setup_m2a(model):
-    model = m2a.configure_model(model)
-    params = m2a.collect_params(model)
-    optimizer = setup_optimizer_m2a(params)
-    m2a_model = m2a.M2A(
-        model, optimizer,
-        steps=cfg.OPTIM.STEPS,
-        episodic=cfg.MODEL.EPISODIC,
-        m=cfg.OPTIM.M,
-        n=cfg.OPTIM.N,
-        lamb=cfg.OPTIM.LAMB,
-        margin=cfg.OPTIM.MARGIN,
-        random_masking=cfg.M2A.RANDOM_MASKING,
-        num_squares=cfg.M2A.NUM_SQUARES,
-        mask_type=cfg.M2A.MASK_TYPE,
-        spatial_type=cfg.M2A.SPATIAL_TYPE,
-        spectral_type=cfg.M2A.SPECTRAL_TYPE,
-        seed=cfg.RNG_SEED,
-        disable_mcl=cfg.M2A.DISABLE_MCL,
-        disable_erl=cfg.M2A.DISABLE_ERL,
-        disable_eml=cfg.M2A.DISABLE_EML,
-    )
+def setup_rem(model):
+    model = rem.configure_model(model)
+    params = rem.collect_params(model)
+    optimizer = setup_optimizer_rem(params)
+    rem_model = rem.REM(model, optimizer,
+                           len_num_keep=cfg.OPTIM.KEEP,
+                           steps=cfg.OPTIM.STEPS,
+                           episodic=cfg.MODEL.EPISODIC,
+                           m = cfg.OPTIM.M,
+                           n = cfg.OPTIM.N,
+                           lamb = cfg.OPTIM.LAMB,
+                           margin = cfg.OPTIM.MARGIN,
+                           )
     # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)
-    return m2a_model
+    return rem_model
 
 
 def compute_metrics(model: nn.Module,
@@ -196,6 +187,7 @@ def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) ->
         prop = count / confs.numel()
         ece += abs(acc_bin - conf_bin) * prop
     return float(ece)
+
 
       
 if __name__ == '__main__':

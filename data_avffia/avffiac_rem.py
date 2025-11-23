@@ -1,43 +1,54 @@
 import logging
 
 import torch
-import torch.optim as optim
 import torch.nn as nn
+import torch.optim as optim
 import torch.nn.functional as F
 
-from robustbench.data import load_imagenetc
-from robustbench.model_zoo.enums import ThreatModel
-from robustbench.utils import load_model
-from robustbench.utils import clean_accuracy as accuracy
+from robustbench.data import load_avffiacc
 
-import m2a
+from robustbench.model_zoo.rem_vit import create_model_rem
+
+import rem
 from conf import cfg, load_cfg_fom_args
 import operators
 
 import numpy as np
-import random
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+def _build_model_from_ckpt(num_classes: int, device: torch.device) -> nn.Module:
+    # Build ViT-Base/16 REM variant with desired num_classes
+    model = create_model_rem("vit_base_patch16_224", pretrained=False, num_classes=num_classes)
+    # Load local checkpoint trained with data_avffia/train.py
+    ckpt_path = getattr(cfg.TEST, 'ckpt', None)
+    if ckpt_path is None or (isinstance(ckpt_path, str) and ckpt_path.strip() == ""):
+        ckpt_path = "/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth"
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+    state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+    model.load_state_dict(state, strict=True)
+    model.to(device)
+    return model
  
+
 def evaluate(description):
     args = load_cfg_fom_args(description)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # configure model
-    base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
-                       cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    base_model.to(device)
+    base_model = _build_model_from_ckpt(num_classes=4, device=device)
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
-    if cfg.MODEL.ADAPTATION == "M2A":
-        logger.info("test-time adaptation: M2A")
-        model = setup_m2a(base_model)
+    elif cfg.MODEL.ADAPTATION == "REM":
+        logger.info("test-time adaptation: REM")
+        model = setup_rem(base_model)
+    else:
+        logger.info("test-time adaptation: %s not supported, defaulting to NONE", cfg.MODEL.ADAPTATION)
+        model = setup_source(base_model)
     # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            # reset adaptation for each combination of corruption x severity
-            # note: for evaluation protocol, but not necessarily needed
             try:
                 if i_x == 0:
                     model.reset()
@@ -45,10 +56,10 @@ def evaluate(description):
                 else:
                     logger.warning(" ")
                     logger.warning("not resetting model")
-            except:
+            except Exception:
                 logger.warning(" ")
                 logger.warning("not resetting model")
-            x_test, y_test = load_imagenetc(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_avffiacc(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
             acc, nll, ece, max_softmax, entropy = compute_metrics(
@@ -61,24 +72,14 @@ def evaluate(description):
             logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
             logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
             
+
 def setup_source(model):
-    """Set up the baseline source model without adaptation."""
     model.eval()
     logger.info(f"model for evaluation: %s", model)
     return model
 
-    
-def setup_optimizer_m2a(params):
-    """Set up optimizer for tent adaptation.
 
-    Tent needs an optimizer for test-time entropy minimization.
-    In principle, tent could make use of any gradient optimizer.
-    In practice, we advise choosing Adam or SGD+momentum.
-    For optimization settings, we advise to use the settings from the end of
-    trainig, if known, or start with a low learning rate (like 0.001) if not.
-
-    For best results, try tuning the learning rate and batch size.
-    """
+def setup_optimizer_rem(params):
     if cfg.OPTIM.METHOD == 'Adam':
         return optim.Adam([{"params": params, "lr": cfg.OPTIM.LR}],
                           lr=cfg.OPTIM.LR,
@@ -94,31 +95,26 @@ def setup_optimizer_m2a(params):
     else:
         raise NotImplementedError
 
-def setup_m2a(model):
-    model = m2a.configure_model(model)
-    params = m2a.collect_params(model)
-    optimizer = setup_optimizer_m2a(params)
-    m2a_model = m2a.M2A(
-        model, optimizer,
-        steps=cfg.OPTIM.STEPS,
-        episodic=cfg.MODEL.EPISODIC,
-        m=cfg.OPTIM.M,
-        n=cfg.OPTIM.N,
-        lamb=cfg.OPTIM.LAMB,
-        margin=cfg.OPTIM.MARGIN,
-        random_masking=cfg.M2A.RANDOM_MASKING,
-        num_squares=cfg.M2A.NUM_SQUARES,
-        mask_type=cfg.M2A.MASK_TYPE,
-        spatial_type=cfg.M2A.SPATIAL_TYPE,
-        spectral_type=cfg.M2A.SPECTRAL_TYPE,
-        seed=cfg.RNG_SEED,
-        disable_mcl=cfg.M2A.DISABLE_MCL,
-        disable_erl=cfg.M2A.DISABLE_ERL,
-        disable_eml=cfg.M2A.DISABLE_EML,
-    )
+
+def setup_rem(model):
+    model = rem.configure_model(model)
+    params = rem.collect_params(model)
+    optimizer = setup_optimizer_rem(params)
+    rem_model = rem.REM(model, optimizer,
+                           len_num_keep=cfg.OPTIM.KEEP,
+                           steps=cfg.OPTIM.STEPS,
+                           episodic=cfg.MODEL.EPISODIC,
+                           m = cfg.OPTIM.M,
+                           n = cfg.OPTIM.N,
+                           lamb = cfg.OPTIM.LAMB,
+                           margin = cfg.OPTIM.MARGIN,
+                           disable_mcl=cfg.M2A.DISABLE_MCL,
+                           disable_erl=cfg.M2A.DISABLE_ERL,
+                           disable_eml=cfg.M2A.DISABLE_EML,
+                           )
     # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)
-    return m2a_model
+    return rem_model
 
 
 def compute_metrics(model: nn.Module,
@@ -199,4 +195,4 @@ def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) ->
 
       
 if __name__ == '__main__':
-    evaluate('"Imagenet-C evaluation.')
+    evaluate('AVFFIA-C evaluation.')
