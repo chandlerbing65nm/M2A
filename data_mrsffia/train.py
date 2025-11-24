@@ -1,5 +1,5 @@
 """
-AVFFIA ViT-B/16 fine-tuning script
+MRSFFIA ViT-B/16 fine-tuning script
 
 Pip requirements (minimum):
   pip install timm torch torchvision tqdm
@@ -13,14 +13,13 @@ Pip requirements (minimum):
 - Saves checkpoints each epoch: model + optimizer + scheduler + epoch + args
 
 Default paths:
-  train root: /scratch/project_465002264/datasets/avffia/AVFFIA-C/clean/train
-  val root:   /scratch/project_465002264/datasets/avffia/AVFFIA-C/clean/test
+  train root: /flash/project_465002264/datasets/mrsffia/MRSFFIA-C/clean/train
+  val root:   /flash/project_465002264/datasets/mrsffia/MRSFFIA-C/clean/test
   ckpt dir:   /users/doloriel/work/Repo/M2A/ckpt
 
 Usage example:
-  python avffia/train.py \
-    --epochs 50 --batch-size 128 --lr 5e-4 --weight-decay 0.05 --num-workers 8 \
-    --class-map-path avffia/robustbench/data/avffia_class_to_id_map.json
+python data_mrsffia/train.py --epochs 50 --batch-size 128 --lr 1e-3 --weight-decay 0.05 --num-workers 4 --use-randaugment
+
 """
 from __future__ import annotations
 
@@ -50,13 +49,13 @@ IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
 DEFAULT_TRAIN_ROOT = \
-    "/scratch/project_465002264/datasets/avffia/AVFFIA-C/clean/train"
+    "/flash/project_465002264/datasets/mrsffia/MRSFFIA-C/clean/train"
 DEFAULT_VAL_ROOT = \
-    "/scratch/project_465002264/datasets/avffia/AVFFIA-C/clean/test"
+    "/flash/project_465002264/datasets/mrsffia/MRSFFIA-C/clean/test"
 DEFAULT_CKPT_DIR = \
     "/users/doloriel/work/Repo/M2A/ckpt"
 DEFAULT_CLASS_MAP = \
-    "/users/doloriel/work/Repo/M2A/avffia/robustbench/data/avffia_class_to_id_map.json"
+    "/users/doloriel/work/Repo/M2A/data_mrsffia/robustbench/data/mrsffia_class_to_id_map.json"
 
 
 @dataclass
@@ -67,9 +66,9 @@ class TrainConfig:
     class_map_path: str = DEFAULT_CLASS_MAP
     epochs: int = 50
     batch_size: int = 128
-    lr: float = 5e-4
+    lr: float = 1e-3
     weight_decay: float = 0.05
-    num_workers: int = 8
+    num_workers: int = 4
     resume: Optional[str] = None
     seed: int = 1
     # Augmentation (RandAugment) and regularization
@@ -255,7 +254,7 @@ def accuracy(output: torch.Tensor, target: torch.Tensor, topk=(1,)):
 
 def save_checkpoint(state: dict, ckpt_dir: str, tag: str = "last"):
     os.makedirs(ckpt_dir, exist_ok=True)
-    path = os.path.join(ckpt_dir, f"avffia_vitb16_{tag}.pth")
+    path = os.path.join(ckpt_dir, f"mrsffia_vitb16_{tag}.pth")
     torch.save(state, path)
 
 
@@ -358,7 +357,7 @@ def validate(model, loader, criterion, device, epoch: int, epochs: int, amp_enab
 
 
 def parse_args() -> TrainConfig:
-    p = argparse.ArgumentParser("AVFFIA ViT-B/16 fine-tuning")
+    p = argparse.ArgumentParser("MRSFFIA ViT-B/16 fine-tuning")
     p.add_argument("--train-root", type=str, default=DEFAULT_TRAIN_ROOT)
     p.add_argument("--val-root", type=str, default=DEFAULT_VAL_ROOT)
     p.add_argument("--ckpt-dir", type=str, default=DEFAULT_CKPT_DIR)

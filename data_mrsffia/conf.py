@@ -215,7 +215,7 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("opts", default=None, nargs=argparse.REMAINDER,
                         help="See conf.py for all options")
     parser.add_argument("--data_dir", default="your_data_path", type=str)
-    parser.add_argument("--checkpoint", default="./ckpt", type=str)
+    parser.add_argument("--checkpoint", default=None, type=str)
     parser.add_argument("--unc_thr", default=0.2, type=float)
     parser.add_argument("--seed", default=None, type=int,
                         help="Override RNG_SEED; if set, seeds numpy/torch/(cuda) and Python RNG")

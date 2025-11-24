@@ -124,7 +124,7 @@ def fmt_std(v: float, decimals: int = 2) -> str:
     return f"{v:.{decimals}f}"
 
 
-def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dict[str, List[str]], per_log_vals: Dict[str, Dict[str, List[float]]]):
+def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dict[str, List[str]], per_log_vals: Dict[str, Dict[str, List[float]]], selected_metric=None):
     order = [
         "Error",
         "NLL",
@@ -134,6 +134,11 @@ def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dic
         "Domain Shift Robustness",
         "Catastrophic Forgetting Rate",
     ]
+    if selected_metric:
+        key = selected_metric.strip().lower()
+        mapping = {m.lower(): m for m in order}
+        if key in mapping:
+            order = [mapping[key]]
     for metric in order:
         values_by_corr = convert_units(agg.get(metric, {}), metric)
         print(f"\nMetric: {metric}")
@@ -202,79 +207,10 @@ def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dic
         print(f"  {'Overall (across logs)':>28}: mean={om_logs} ({os_logs})")
 
 
-def print_single_metric(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dict[str, List[str]], per_log_vals: Dict[str, Dict[str, List[float]]], metric: str):
-    values_by_corr = convert_units(agg.get(metric, {}), metric)
-    print(f"\nMetric: {metric}")
-    means_for_overall: List[float] = []
-    order_list = order_by_metric.get(metric, [])
-    corrs_iter = order_list + [c for c in values_by_corr.keys() if c not in order_list]
-    for corr in corrs_iter:
-        c, m, s = compute_stats(values_by_corr[corr])
-        if metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
-            m_str = fmt_mean(m) + "%"
-            s_str = fmt_std(s) + "%"
-        elif metric == "Adaptation MACs":
-            m_str = f"{m:.6g}" if m == m else "nan"
-            s_str = f"{s:.6g}" if s == s else "nan"
-        else:
-            m_str = fmt_mean(m)
-            s_str = fmt_std(s)
-        print(f"  {corr:>28}: count={c:2d}, mean={m_str} ({s_str})")
-        if m == m:
-            means_for_overall.append(m)
-    if means_for_overall:
-        overall_mean = float(mean(means_for_overall))
-        overall_std = float(stdev(means_for_overall)) if len(means_for_overall) > 1 else float("nan")
-    else:
-        overall_mean = float("nan")
-        overall_std = float("nan")
-    if metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
-        om = fmt_mean(overall_mean) + "%"
-        os = fmt_std(overall_std) + "%"
-    elif metric == "Adaptation MACs":
-        om = f"{overall_mean:.6g}" if overall_mean == overall_mean else "nan"
-        os = f"{overall_std:.6g}" if overall_std == overall_std else "nan"
-    else:
-        om = fmt_mean(overall_mean)
-        os = fmt_std(overall_std)
-    print(f"  {'Overall (across corruptions)':>28}: mean={om} ({os})")
-
-    # Overall across logs: compute per-log mean/std across corruptions, then average these across logs
-    log_series = per_log_vals.get(metric, {})
-    per_log_means: List[float] = []
-    per_log_stds: List[float] = []
-    for lp, vals in log_series.items():
-        conv_vals = convert_units({"_": vals}, metric)["_"]
-        if not conv_vals:
-            continue
-        per_log_means.append(float(mean(conv_vals)))
-        s_val = float(stdev(conv_vals)) if len(conv_vals) > 1 else float("nan")
-        per_log_stds.append(s_val)
-    if per_log_means:
-        overall_mean_logs = float(mean(per_log_means))
-        overall_std_logs = float(stdev(per_log_means)) if len(per_log_means) > 1 else float("nan")
-    else:
-        overall_mean_logs = float("nan")
-        overall_std_logs = float("nan")
-
-    if metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
-        om_logs = fmt_mean(overall_mean_logs) + "%"
-        os_logs = fmt_std(overall_std_logs) + "%"
-    elif metric == "Adaptation MACs":
-        om_logs = f"{overall_mean_logs:.6g}" if overall_mean_logs == overall_mean_logs else "nan"
-        os_logs = f"{overall_std_logs:.6g}" if overall_std_logs == overall_std_logs else "nan"
-    else:
-        om_logs = fmt_mean(overall_mean_logs)
-        os_logs = fmt_std(overall_std_logs)
-    print(f"  {'Overall (across logs)':>28}: mean={om_logs} ({os_logs})")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Aggregate corruption-wise metrics across multiple logs.")
     parser.add_argument("logs", nargs="*", type=str, help="Paths to log files to parse")
-    parser.add_argument("--metric", type=str, default=None,
-                        choices=["Error", "NLL", "ECE", "Adaptation Time", "Adaptation MACs", "Domain Shift Robustness", "Catastrophic Forgetting Rate"],
-                        help="If set, only print this metric instead of all.")
+    parser.add_argument("--metric", type=str, default=None, help="Single metric to print (e.g., Error, NLL, ECE)")
     args = parser.parse_args()
 
     default_logs = [
@@ -285,10 +221,7 @@ def main():
     log_paths = [Path(p) for p in (args.logs if args.logs else default_logs)]
 
     agg, order_by_metric, per_log_vals = aggregate_across_logs(log_paths)
-    if args.metric:
-        print_single_metric(agg, order_by_metric, per_log_vals, args.metric)
-    else:
-        print_aggregate(agg, order_by_metric, per_log_vals)
+    print_aggregate(agg, order_by_metric, per_log_vals, selected_metric=args.metric)
 
 
 if __name__ == "__main__":

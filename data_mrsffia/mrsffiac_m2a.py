@@ -5,12 +5,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from robustbench.data import load_avffiac
+from robustbench.data import load_mrsffiac
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
 
-import rem
+import m2a
 from conf import cfg, load_cfg_fom_args
 import operators
 
@@ -30,7 +30,7 @@ def rm_substr_from_state_dict(state_dict, substr):
         else:
             new_state_dict[key] = state_dict[key]
     return new_state_dict
-
+    
 def evaluate(description):
     args = load_cfg_fom_args(description)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -38,7 +38,7 @@ def evaluate(description):
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
 
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth", map_location='cpu')
+    checkpoint = torch.load(cfg.TEST.ckpt, map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
     base_model.load_state_dict(checkpoint, strict=True)
     del checkpoint
@@ -56,9 +56,9 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
-    if cfg.MODEL.ADAPTATION == "REM":
-        logger.info("test-time adaptation: REM")
-        model = setup_rem(base_model)
+    if cfg.MODEL.ADAPTATION == "M2A":
+        logger.info("test-time adaptation: M2A")
+        model = setup_m2a(base_model)
     # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -74,7 +74,7 @@ def evaluate(description):
             except:
                 logger.warning(" ")
                 logger.warning("not resetting model")
-            x_test, y_test = load_avffiac(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_mrsffiac(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
             acc, nll, ece, max_softmax, entropy = compute_metrics(
@@ -86,25 +86,15 @@ def evaluate(description):
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
             logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
             logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
-            
+
+
 def setup_source(model):
-    """Set up the baseline source model without adaptation."""
     model.eval()
     logger.info(f"model for evaluation: %s", model)
     return model
 
-    
-def setup_optimizer_rem(params):
-    """Set up optimizer for tent adaptation.
 
-    Tent needs an optimizer for test-time entropy minimization.
-    In principle, tent could make use of any gradient optimizer.
-    In practice, we advise choosing Adam or SGD+momentum.
-    For optimization settings, we advise to use the settings from the end of
-    trainig, if known, or start with a low learning rate (like 0.001) if not.
-
-    For best results, try tuning the learning rate and batch size.
-    """
+def setup_optimizer(params):
     if cfg.OPTIM.METHOD == 'Adam':
         return optim.Adam([{"params": params, "lr": cfg.OPTIM.LR}],
                           lr=cfg.OPTIM.LR,
@@ -120,22 +110,32 @@ def setup_optimizer_rem(params):
     else:
         raise NotImplementedError
 
-def setup_rem(model):
-    model = rem.configure_model(model)
-    params = rem.collect_params(model)
-    optimizer = setup_optimizer_rem(params)
-    rem_model = rem.REM(model, optimizer,
-                           len_num_keep=cfg.OPTIM.KEEP,
-                           steps=cfg.OPTIM.STEPS,
-                           episodic=cfg.MODEL.EPISODIC,
-                           m = cfg.OPTIM.M,
-                           n = cfg.OPTIM.N,
-                           lamb = cfg.OPTIM.LAMB,
-                           margin = cfg.OPTIM.MARGIN,
-                           )
+
+def setup_m2a(model):
+    model = m2a.configure_model(model)
+    params = m2a.collect_params(model)
+    optimizer = setup_optimizer(params)
+    m2a_model = m2a.M2A(
+        model, optimizer,
+        steps=cfg.OPTIM.STEPS,
+        episodic=cfg.MODEL.EPISODIC,
+        m=cfg.OPTIM.M,
+        n=cfg.OPTIM.N,
+        lamb=cfg.OPTIM.LAMB,
+        margin=cfg.OPTIM.MARGIN,
+        random_masking=cfg.M2A.RANDOM_MASKING,
+        num_squares=cfg.M2A.NUM_SQUARES,
+        mask_type=cfg.M2A.MASK_TYPE,
+        spatial_type=cfg.M2A.SPATIAL_TYPE,
+        spectral_type=cfg.M2A.SPECTRAL_TYPE,
+        seed=cfg.RNG_SEED,
+        disable_mcl=cfg.M2A.DISABLE_MCL,
+        disable_erl=cfg.M2A.DISABLE_ERL,
+        disable_eml=cfg.M2A.DISABLE_EML,
+    )
     # logger.info(f"model for adaptation: %s", model)
     logger.info(f"optimizer for adaptation: %s", optimizer)
-    return rem_model
+    return m2a_model
 
 
 def compute_metrics(model: nn.Module,
@@ -155,8 +155,6 @@ def compute_metrics(model: nn.Module,
     nll_sum = 0.0
     max_softmax_sum = 0.0
     entropy_sum = 0.0
-    confs_all = []
-    correct_all = []
 
     with torch.no_grad():
         for b in range(n_batches):
@@ -175,8 +173,6 @@ def compute_metrics(model: nn.Module,
             confs = probs.max(dim=1).values
             ents = -(probs * probs.clamp_min(1e-12).log()).sum(dim=1)
 
-            confs_all.append(confs.detach().cpu())
-            correct_all.append((preds == y_b).detach().cpu())
             max_softmax_sum += float(confs.sum().item())
             entropy_sum += float(ents.sum().item())
 
@@ -187,32 +183,10 @@ def compute_metrics(model: nn.Module,
     nll = nll_sum / total_eval
     max_softmax = max_softmax_sum / total_eval if total_eval > 0 else 0.0
     entropy = entropy_sum / total_eval if total_eval > 0 else 0.0
-    confs_all = torch.cat(confs_all) if len(confs_all) else torch.empty(0)
-    correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
-    ece = compute_ece(confs_all, correct_all)
+    # ECE omitted here to keep parity with imagenetc_m2a baseline
+    ece = 0.0
     return acc, nll, ece, max_softmax, entropy
 
 
-def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
-    if confs.numel() == 0:
-        return 0.0
-    ece = 0.0
-    bin_boundaries = torch.linspace(0, 1, steps=n_bins + 1)
-    for i in range(n_bins):
-        lo = bin_boundaries[i]
-        hi = bin_boundaries[i + 1]
-        if i == n_bins - 1:
-            in_bin = (confs >= lo) & (confs <= hi)
-        else:
-            in_bin = (confs >= lo) & (confs < hi)
-        count = in_bin.sum().item()
-        if count == 0:
-            continue
-        conf_bin = confs[in_bin].mean().item()
-        acc_bin = correct[in_bin].mean().item()
-        prop = count / confs.numel()
-        ece += abs(acc_bin - conf_bin) * prop
-    return float(ece)
-
 if __name__ == '__main__':
-    evaluate('"AVFFIA-C evaluation.')
+    evaluate('MRSFFIA-C M2A evaluation.')

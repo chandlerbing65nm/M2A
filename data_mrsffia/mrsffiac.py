@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from robustbench.data import load_avffiac
+from robustbench.data import load_mrsffiac
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
@@ -30,7 +30,7 @@ def rm_substr_from_state_dict(state_dict, substr):
         else:
             new_state_dict[key] = state_dict[key]
     return new_state_dict
-    
+
 def evaluate(description):
     args = load_cfg_fom_args(description)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -38,7 +38,7 @@ def evaluate(description):
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
 
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth", map_location='cpu')
+    checkpoint = torch.load(cfg.TEST.ckpt, map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
     base_model.load_state_dict(checkpoint, strict=True)
     del checkpoint
@@ -56,9 +56,6 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
-    if cfg.MODEL.ADAPTATION == "REM":
-        logger.info("test-time adaptation: REM")
-        model = setup_rem(base_model)
     # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -74,7 +71,7 @@ def evaluate(description):
             except:
                 logger.warning(" ")
                 logger.warning("not resetting model")
-            x_test, y_test = load_avffiac(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_mrsffiac(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
             acc, nll, ece, max_softmax, entropy = compute_metrics(
@@ -215,4 +212,4 @@ def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) ->
     return float(ece)
 
 if __name__ == '__main__':
-    evaluate('"AVFFIA-C evaluation.')
+    evaluate('"MRSFFIA-C evaluation.')

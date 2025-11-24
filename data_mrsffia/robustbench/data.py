@@ -98,7 +98,7 @@ def load_imagenet(
     
     return x_test, y_test
 
-# def load_avffiacc(
+# def load_mrsffiacc(
 #     n_examples: Optional[int] = 5000,
 #     severity: int = 5,
 #     data_dir: str = './data',
@@ -120,12 +120,12 @@ def load_imagenet(
 #         corruptions = CORRUPTIONS
 
 #     assert len(corruptions) == 1, "only one corruption is supported per call"
-#     data_folder_path = Path(data_dir) / 'AVFFIA-C' / corruptions[0] / str(severity)
+#     data_folder_path = Path(data_dir) / 'MRSFFIA-C' / corruptions[0] / str(severity)
 #     imagenet = CustomImageFolder(
 #         data_folder_path,
 #         transforms_test,
-#         path_imgs='robustbench/data/avffia_test_image_ids.txt',
-#         cls_dict='robustbench/data/avffia_class_to_id_map.json',
+#         path_imgs='robustbench/data/mrsffia_test_image_ids.txt',
+#         cls_dict='robustbench/data/mrsffia_class_to_id_map.json',
 #     )
 
 #     test_loader = data.DataLoader(imagenet, batch_size=n_examples,
@@ -164,7 +164,7 @@ CORRUPTIONS_DIR_NAMES: Dict[BenchmarkDataset, str] = {
     BenchmarkDataset.cifar_10: "CIFAR-10-C",
     BenchmarkDataset.cifar_100: "CIFAR-100-C",
     BenchmarkDataset.imagenet: "ImageNet-C",
-    BenchmarkDataset.avffia: "AVFFIA-C"
+    BenchmarkDataset.mrsffia: "MRSFFIA-C"
 }
 
 
@@ -217,13 +217,13 @@ def load_imagenetc(
 
     return x_test, y_test
 
-def load_avffiac(
+def load_mrsffiac(
     n_examples: Optional[int] = 5000,
     severity: int = 5,
     data_dir: str = './data',
     shuffle: bool = False,
     corruptions: Sequence[str] = CORRUPTIONS,
-    prepr: str = 'Res256Crop224Norm'
+    prepr: str = 'Res256Crop224'
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     transforms_test = PREPROCESSINGS[prepr]
 
@@ -232,10 +232,10 @@ def load_avffiac(
     #  or alternatively creating yet another CustomImageFolder class that fetches images from multiple corruption types
     #  at once -- perhaps this is a cleaner solution)
 
-    data_folder_path = Path(data_dir) / CORRUPTIONS_DIR_NAMES[BenchmarkDataset.avffia] / corruptions[0] / str(severity)
-    avffia = CustomImageFolder(data_folder_path, transforms_test)
+    data_folder_path = Path(data_dir) / CORRUPTIONS_DIR_NAMES[BenchmarkDataset.mrsffia] / corruptions[0] / str(severity)
+    mrsffia = CustomImageFolder(data_folder_path, transforms_test)
 
-    test_loader = data.DataLoader(avffia, batch_size=n_examples,
+    test_loader = data.DataLoader(mrsffia, batch_size=n_examples,
                                   shuffle=shuffle, num_workers=2)
 
     x_test, y_test, paths = next(iter(test_loader))
@@ -249,7 +249,7 @@ CORRUPTION_DATASET_LOADERS: Dict[BenchmarkDataset, CorruptDatasetLoader] = {
     BenchmarkDataset.cifar_10: load_cifar10c,
     BenchmarkDataset.cifar_100: load_cifar100c,
     BenchmarkDataset.imagenet: load_imagenetc,
-    BenchmarkDataset.avffia: load_avffiac,
+    BenchmarkDataset.mrsffia: load_mrsffiac,
 }
 
 

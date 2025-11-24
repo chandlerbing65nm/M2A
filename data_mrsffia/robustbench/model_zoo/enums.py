@@ -5,7 +5,7 @@ class BenchmarkDataset(Enum):
     cifar_10 = 'cifar10'
     cifar_100 = 'cifar100'
     imagenet = 'imagenet'
-    avffia = 'avffia'
+    mrsffia = 'mrsffia'
 
 
 class ThreatModel(Enum):
