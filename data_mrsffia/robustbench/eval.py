@@ -73,6 +73,8 @@ def benchmark(model: Union[nn.Module, Sequence[nn.Module]],
 
     if dataset == 'imagenet':
         prepr = all_models[dataset_][threat_model_][model_name]['preprocessing']
+    if dataset == 'mrsffia':
+        prepr = all_models[dataset_][threat_model_][model_name]['preprocessing']
     else:
         prepr = 'none'
     

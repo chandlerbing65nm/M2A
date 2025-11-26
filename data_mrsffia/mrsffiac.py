@@ -38,19 +38,20 @@ def evaluate(description):
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
 
-    checkpoint = torch.load(cfg.TEST.ckpt, map_location='cpu')
-    checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
-    base_model.load_state_dict(checkpoint, strict=True)
-    del checkpoint
+    # checkpoint = torch.load(cfg.TEST.ckpt, map_location='cpu')
+    # checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
+    # base_model.load_state_dict(checkpoint, strict=True)
+    # del checkpoint
     if cfg.TEST.ckpt is not None:
         # make parallel only if CUDA is available
-        if device.type == 'cuda':
-            base_model = torch.nn.DataParallel(base_model)
+        # if device.type == 'cuda':
+        #     base_model = torch.nn.DataParallel(base_model)
         checkpoint = torch.load(cfg.TEST.ckpt, map_location='cpu')
-        base_model.load_state_dict(checkpoint['model'], strict=False)
-    else:
-        if device.type == 'cuda':
-            base_model = torch.nn.DataParallel(base_model)
+        checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
+        base_model.load_state_dict(checkpoint, strict=True)
+    # else:
+    #     if device.type == 'cuda':
+    #         base_model = torch.nn.DataParallel(base_model)
 
     base_model.to(device)
     if cfg.MODEL.ADAPTATION == "source":

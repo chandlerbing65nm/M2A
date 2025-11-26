@@ -54,7 +54,6 @@ default_cfgs = {'vit_base_patch16_224': _cfg(
     num_classes=4, input_size=(3, 224, 224), crop_pct=1.0)
 }
 
-
 def resize_pos_embed(posemb, posemb_new, num_tokens=1, gs_new=()):
     # Rescale the grid of position embeddings when loading from state_dict. Adapted from
     # https://github.com/google-research/vision_transformer/blob/00883dd691c63a6830751563748663526e811cee/vit_jax/checkpoint.py#L224
@@ -136,6 +135,12 @@ def _create_vision_transformer(variant, pretrained=False, default_cfg=None, **kw
             **kwargs)
         return model
 
+def vit_tiny_patch16_224(pretrained=False, **kwargs):
+    """ ViT-Tiny (Vit-Ti/16)
+    """
+    model_kwargs = dict(patch_size=16, embed_dim=192, depth=12, num_heads=3, **kwargs)
+    model = _create_vision_transformer('vit_tiny_patch16_224', pretrained=pretrained, **model_kwargs)
+    return model
 
 def vit_base_patch16_224(pretrained=False, **kwargs):
     """ ViT-Base model (ViT-B/16) from original paper (https://arxiv.org/abs/2010.11929).
@@ -143,6 +148,14 @@ def vit_base_patch16_224(pretrained=False, **kwargs):
     """
     model_kwargs = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12, **kwargs)
     model = _create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **model_kwargs)
+    return model
+
+def vit_large_patch16_224(pretrained=False, **kwargs):
+    """ ViT-Large model (ViT-L/32) from original paper (https://arxiv.org/abs/2010.11929).
+    ImageNet-1k weights fine-tuned from in21k @ 224x224, source https://github.com/google-research/vision_transformer.
+    """
+    model_kwargs = dict(patch_size=16, embed_dim=1024, depth=24, num_heads=16, **kwargs)
+    model = _create_vision_transformer('vit_large_patch16_224', pretrained=pretrained, **model_kwargs)
     return model
 
 

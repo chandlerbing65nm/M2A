@@ -119,7 +119,7 @@ common_corruptions = OrderedDict(
             'preprocessing': 'Res256Crop224'
         }),
         ('Standard_VITB_M2A', {
-            'model': lambda: create_model_rem("vit_base_patch16_224", pretrained=True),
+            'model': lambda: create_model("vit_base_patch16_224", pretrained=True),
             'gdrive_id': '',
             'preprocessing': 'Res256Crop224'
         }),

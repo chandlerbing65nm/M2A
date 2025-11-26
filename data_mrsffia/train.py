@@ -37,10 +37,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from tqdm import tqdm
+from robustbench.model_zoo.vit import create_model as rb_create_model
 
 import timm
 
@@ -49,9 +49,9 @@ IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
 
 DEFAULT_TRAIN_ROOT = \
-    "/flash/project_465002264/datasets/mrsffia/MRSFFIA-C/clean/train"
+    "/flash/project_465002264/datasets/mrsffia/split/clean/train"
 DEFAULT_VAL_ROOT = \
-    "/flash/project_465002264/datasets/mrsffia/MRSFFIA-C/clean/test"
+    "/flash/project_465002264/datasets/mrsffia/split/clean/test"
 DEFAULT_CKPT_DIR = \
     "/users/doloriel/work/Repo/M2A/ckpt"
 DEFAULT_CLASS_MAP = \
@@ -71,19 +71,15 @@ class TrainConfig:
     num_workers: int = 4
     resume: Optional[str] = None
     seed: int = 1
+    patience: int = 0
+    tag: Optional[str] = None
+    trainable: Optional[str] = None
     # Augmentation (RandAugment) and regularization
     use_randaugment: bool = True
     rand_n: int = 2
     rand_m: int = 9
     random_erasing: float = 0.0
-    # Model regularization knobs
-    drop_rate: float = 0.0
-    drop_path_rate: float = 0.1
-    # Scheduler warmup
-    warmup_epochs: int = 5
-    warmup_start_factor: float = 0.01
-    # Label smoothing
-    label_smoothing: float = 0.1
+    # Model regularization knobs (disabled)
     # AMP control
     no_amp: bool = False
 
@@ -125,28 +121,22 @@ def build_transforms(cfg: TrainConfig) -> Tuple[transforms.Compose, transforms.C
     Val:   Resize->CenterCrop->ToTensor->Normalize
     """
     train_list = [
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.RandomHorizontalFlip(p=0.5),
+        # transforms.Resize(256),
+        # transforms.CenterCrop(224),
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
     ]
-    if cfg.use_randaugment:
-        try:
-            train_list.append(transforms.RandAugment(num_ops=cfg.rand_n, magnitude=cfg.rand_m))
-        except TypeError:
-            train_list.append(transforms.RandAugment(cfg.rand_n, cfg.rand_m))
     train_list.extend([
         transforms.ToTensor(),
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        # transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
     ])
-    if cfg.random_erasing and cfg.random_erasing > 0.0:
-        train_list.append(transforms.RandomErasing(p=cfg.random_erasing, scale=(0.33, 0.5), ratio=(0.3, 3.3), value='random'))
 
     train_tf = transforms.Compose(train_list)
     val_tf = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
+        # transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
     ])
     return train_tf, val_tf
 
@@ -224,15 +214,40 @@ def build_dataloaders(cfg: TrainConfig) -> Tuple[Dataset, Dataset, DataLoader, D
 
 
 def build_model(num_classes: int, cfg: TrainConfig) -> nn.Module:
-    # Load ViT-B/16 with ImageNet pretrained weights, set classifier to num_classes
-    model = timm.create_model(
+    model = rb_create_model(
         "vit_base_patch16_224",
         pretrained=True,
         num_classes=num_classes,
-        drop_rate=cfg.drop_rate,
-        drop_path_rate=cfg.drop_path_rate,
     )
     return model
+
+
+def select_trainable_params(model: nn.Module, trainable_spec: Optional[str]):
+    if not trainable_spec:
+        return list(model.parameters())
+    try:
+        parts = [s.strip() for s in str(trainable_spec).split(',') if s.strip()]
+        indices = set(int(p) for p in parts)
+    except Exception:
+        return list(model.parameters())
+    try:
+        model.requires_grad_(False)
+        if hasattr(model, 'blocks') and isinstance(model.blocks, torch.nn.ModuleList) or True:
+            try:
+                n_blocks = len(model.blocks)
+            except Exception:
+                n_blocks = 0
+            for i in range(n_blocks):
+                if i in indices:
+                    for p in model.blocks[i].parameters():
+                        p.requires_grad = True
+        if (-1 in indices) and hasattr(model, 'head'):
+            for p in model.head.parameters():
+                p.requires_grad = True
+    except Exception:
+        return list(model.parameters())
+    params = [p for p in model.parameters() if getattr(p, 'requires_grad', False)]
+    return params if params else list(model.parameters())
 
 
 def accuracy(output: torch.Tensor, target: torch.Tensor, topk=(1,)):
@@ -368,19 +383,17 @@ def parse_args() -> TrainConfig:
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=5e-4)
-    p.add_argument("--weight-decay", type=float, default=0.05)
+    p.add_argument("--weight-decay", type=float, default=0.00)
     p.add_argument("--num-workers", type=int, default=8)
+    p.add_argument("--patience", type=int, default=0)
+    p.add_argument("--tag", type=str, default=None)
+    p.add_argument("--trainable", type=str, default=None,
+                   help="Comma-separated indices of ViT blocks to train; use -1 to also train the head. Example: '9,10,11,-1'.")
     # Augmentations and regularization knobs
     p.add_argument("--use-randaugment", action="store_true", help="Enable RandAugment in training transforms")
     p.add_argument("--rand-n", type=int, default=2, help="RandAugment num_ops")
     p.add_argument("--rand-m", type=int, default=9, help="RandAugment magnitude")
     p.add_argument("--random-erasing", type=float, default=0.0, help="RandomErasing probability (0 to disable)")
-    p.add_argument("--drop-rate", type=float, default=0.0, help="Model dropout rate")
-    p.add_argument("--drop-path-rate", type=float, default=0.1, help="Stochastic depth rate")
-    # Scheduler warmup and label smoothing
-    p.add_argument("--warmup-epochs", type=int, default=5)
-    p.add_argument("--warmup-start-factor", type=float, default=0.01)
-    p.add_argument("--label-smoothing", type=float, default=0.1)
     p.add_argument("--no-amp", action="store_true", help="Disable mixed precision (AMP)")
 
     p.add_argument("--resume", type=str, default=None,
@@ -400,15 +413,13 @@ def parse_args() -> TrainConfig:
         num_workers=args.num_workers,
         resume=args.resume,
         seed=args.seed,
+        patience=int(args.patience),
+        tag=args.tag,
+        trainable=args.trainable,
         use_randaugment=bool(args.use_randaugment),
         rand_n=int(args.rand_n),
         rand_m=int(args.rand_m),
         random_erasing=float(args.random_erasing),
-        drop_rate=float(args.drop_rate),
-        drop_path_rate=float(args.drop_path_rate),
-        warmup_epochs=int(args.warmup_epochs),
-        warmup_start_factor=float(args.warmup_start_factor),
-        label_smoothing=float(args.label_smoothing),
         no_amp=bool(args.no_amp),
     )
 
@@ -438,25 +449,19 @@ def main():
     model.to(device)
 
     # Optim / Loss / Sched
-    criterion = nn.CrossEntropyLoss(label_smoothing=cfg.label_smoothing)
-    optimizer = optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
-    # Warmup + Cosine scheduler
-    total_main_epochs = max(1, cfg.epochs - max(0, cfg.warmup_epochs))
-    sched_cos = CosineAnnealingLR(optimizer, T_max=total_main_epochs)
-    if cfg.warmup_epochs > 0:
-        sched_wu = LinearLR(optimizer, start_factor=cfg.warmup_start_factor, end_factor=1.0, total_iters=cfg.warmup_epochs)
-        scheduler = SequentialLR(optimizer, schedulers=[sched_wu, sched_cos], milestones=[cfg.warmup_epochs])
-    else:
-        scheduler = sched_cos
+    criterion = nn.CrossEntropyLoss()
+    opt_params = select_trainable_params(model, cfg.trainable)
+    optimizer = optim.Adam(opt_params, lr=cfg.lr, weight_decay=cfg.weight_decay)
 
     amp_enabled = (device.type == "cuda" and not cfg.no_amp)
     scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 
     # Optionally resume
-    start_epoch = load_checkpoint_if_any(model, optimizer, scheduler, cfg.resume)
+    start_epoch = load_checkpoint_if_any(model, optimizer, None, cfg.resume)
 
     # Train loop
     best_top1 = -1.0
+    epochs_no_improve = 0
     for epoch in range(start_epoch, cfg.epochs):
         train_loss, train_top1, train_map1 = train_one_epoch(
             model, train_loader, criterion, optimizer, scaler, device, epoch, cfg.epochs, num_classes
@@ -465,29 +470,33 @@ def main():
             model, val_loader, criterion, device, epoch, cfg.epochs, amp_enabled, num_classes
         )
 
-        scheduler.step()
+        # No scheduler
 
         state = {
             "epoch": epoch,
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(),
             "args": cfg.__dict__,
         }
         # Save last every epoch
-        save_checkpoint(state, cfg.ckpt_dir, tag="last")
-        # Save best if improved
         if val_top1 > best_top1:
             best_top1 = val_top1
+            epochs_no_improve = 0
             state_best = dict(state)
             state_best["best_top1"] = best_top1
-            save_checkpoint(state_best, cfg.ckpt_dir, tag="best")
+            save_checkpoint(state_best, cfg.ckpt_dir, tag=("best" + (f"_{cfg.tag}" if cfg.tag else "")))
+        else:
+            epochs_no_improve += 1
 
         print(
             f"Epoch {epoch+1}/{cfg.epochs}: "
             f"train_loss={train_loss:.4f} train_top1={train_top1:.2f}% train_mAP@1={train_map1:.2f}% | "
             f"val_loss={val_loss:.4f} val_top1={val_top1:.2f}% val_mAP@1={val_map1:.2f}%"
         )
+
+        if cfg.patience > 0 and epochs_no_improve >= cfg.patience:
+            print(f"Early stopping triggered: no val_top1 improvement for {cfg.patience} epoch(s). Best val_top1={best_top1:.2f}%.")
+            break
 
 
 if __name__ == "__main__":

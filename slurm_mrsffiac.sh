@@ -25,41 +25,42 @@ source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
-# python -m mrsffiac_m2a \
-#       --cfg cfgs/vit/m2a.yaml \
-#       --data_dir /scratch/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
+# python -m mrsffiac \
+#       --cfg cfgs/vit/source.yaml \
+#       --data_dir /flash/project_465002264/datasets/mrsffia \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
 #       --seed 1 \
-#       --m 0.1 \
-#       --n 3 \
-#       --steps 1 \
-#       --lr 1e-5 \
-#       --lamb 1.0 \
-#       --random_masking spatial \
-#       --spatial_type patch \
-#       --spectral_type all \
-#       --num_squares 1 \
-#       --mask_type binary \
-#       --disable_erl \
-#       CORRUPTION.NUM_EX 5600
+#       CORRUPTION.NUM_EX 764
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
 # python -m mrsffiac_rem \
 #       --cfg cfgs/vit/rem.yaml \
-#       --data_dir /scratch/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/uffia_vitb16_best.pth \
+#       --data_dir /flash/project_465002264/datasets/mrsffia \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
 #       --seed 1 \
 #       --m 0.1 \
 #       --n 3 \
 #       --steps 1 \
-#       --lr 1e-5 \
+#       --lr 1e-6 \
 #       --lamb 1.0 \
 #       --disable_eml \
-#       CORRUPTION.NUM_EX 5600
+#       CORRUPTION.NUM_EX 764
 
 cd /users/doloriel/work/Repo/M2A/data_mrsffia
-python -m mrsffiac \
-      --cfg cfgs/vit/source.yaml \
-      --data_dir /scratch/project_465002264/datasets/mrsffia \
+python -m mrsffiac_m2a \
+      --cfg cfgs/vit/m2a.yaml \
+      --data_dir /flash/project_465002264/datasets/mrsffia \
+      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
       --seed 1 \
-      CORRUPTION.NUM_EX 5600
+      --m 0.1 \
+      --n 3 \
+      --steps 1 \
+      --lr 1e-4 \
+      --lamb 1.0 \
+      --random_masking spatial \
+      --spatial_type patch \
+      --spectral_type all \
+      --num_squares 1 \
+      --mask_type binary \
+      --disable_erl \
+      CORRUPTION.NUM_EX 764

@@ -11,7 +11,7 @@ CORRUPTION:
     - gaussian_noise
     - shot_noise
     - impulse_noise
-    - defocus_blur
+    - defocus_blur 
     - glass_blur
     - motion_blur
     - zoom_blur
