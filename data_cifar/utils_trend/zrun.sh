@@ -42,11 +42,11 @@ python /users/doloriel/work/Repo/M2A/cifar/scripts/m2a_masking_trend_cifar10c.py
   --batch_size 50 \
   --num_examples 100 \
   --severity 5 \
-  --out_dir /users/doloriel/work/Repo/M2A/cifar/plots/M2A/Trend/Spectral \
+  --out_dir /users/doloriel/work/Repo/M2A/cifar/plots/M2A/Trend/Frequency \
   --progression 0 100 10 \
   --save_mask_examples 2 \
   --mask_example_levels 0 15 30 \
-  --mask_figs_dir /users/doloriel/work/Repo/M2A/cifar/figs/M2A/Spectral \
+  --mask_figs_dir /users/doloriel/work/Repo/M2A/cifar/figs/M2A/Frequency \
   --example_class airplane \
   --random_seed 50 \
   --save_frequency_energy_plot \

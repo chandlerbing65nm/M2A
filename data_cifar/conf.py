@@ -263,6 +263,8 @@ def load_cfg_fom_args(description="Config options."):
                     help="if use hog")
     parser.add_argument("--hog_ratio", type=float,
                     help="hog ratio")
+    parser.add_argument("--save_ckpt", action="store_true",
+                        help="If set, save a checkpoint of the adapted model at the end of evaluation")
 
     # M2A (CTTA) optimization CLI options
     parser.add_argument("--steps", type=int, default=None,

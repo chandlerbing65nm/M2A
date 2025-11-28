@@ -477,7 +477,9 @@ class M2A(nn.Module):
         self._logm2a_params_added = False
         self.logm2a_temp = float(logm2a_temp)
 
-        
+        self.last_mcl = 0.0
+        self.last_erl = 0.0
+        self.last_eml = 0.0
 
     @contextmanager
     def no_adapt_mode(self):
@@ -932,6 +934,19 @@ class M2A(nn.Module):
         mcl_plot_val = mcl_loss if mcl_loss is not None else torch.tensor(0.0, device=x.device)
         erl_plot_val = erl_loss if erl_loss is not None else torch.tensor(0.0, device=x.device)
         self._update_and_plot_losses(mcl_val=mcl_plot_val, erl_val=erl_plot_val)
+
+        try:
+            self.last_mcl = float(mcl_plot_val.detach().item())
+        except Exception:
+            self.last_mcl = 0.0
+        try:
+            self.last_erl = float(erl_plot_val.detach().item())
+        except Exception:
+            self.last_erl = 0.0
+        try:
+            self.last_eml = float(eml_loss.detach().item()) if eml_loss is not None else 0.0
+        except Exception:
+            self.last_eml = 0.0
 
         # Return full-batch predictions
         return outputs_list[0]

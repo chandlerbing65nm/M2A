@@ -88,6 +88,8 @@ def shorthand_from_corruption(corr: str) -> str:
     parts = [p for p in base.split("_") if p]
     if not parts:
         return corr.upper()
+    if len(parts) == 1 and parts[0].lower() == 'frost':
+        return 'Fr'
     initials = ''.join([p[0].upper() for p in parts])
     return initials
 
@@ -153,7 +155,7 @@ def main():
     parser.add_argument('--names', nargs='+', required=True, help='Legend names, one per log')
     parser.add_argument('--metrics', nargs='+', required=True,
                         help='Metrics to plot (choose from: Error, NLL, ECE, Max Softmax, Entropy, Cosine)')
-    parser.add_argument('--outdir', default=os.path.dirname('/users/doloriel/work/Repo/M2A/cifar/plots/SPARE/Misc/cifar10/error_rate_samples.png'),
+    parser.add_argument('--outdir', default=os.path.dirname('/users/doloriel/work/Repo/M2A/data_cifar/plots/M2A/Misc/cifar10/error_rate_samples.png'),
                         help='Output directory (default: same dir as error_rate_samples.png)')
     parser.add_argument('--outfile', default='spider.png', help='Output filename (default: spider.png)')
     args = parser.parse_args()
@@ -236,8 +238,11 @@ def main():
     handles = [Line2D([0], [0], color=colors[i], lw=2) for i in range(len(args.names))]
     base_fs = float(plt.rcParams.get('font.size', 10.0))
     big_fs = base_fs
-    fig.legend(handles, args.names, loc='lower center', ncol=min(len(args.names), 4), prop={'size': big_fs})
-    fig.tight_layout(rect=(0, 0.10, 1, 1))
+    legend_ncol = len(args.names) if len(args.names) < 2 else 2
+    legend_rows = int(math.ceil(len(args.names) / legend_ncol))
+    fig.legend(handles, args.names, loc='lower center', ncol=legend_ncol, prop={'size': big_fs})
+    bottom_margin = 0.10 + 0.05 * max(0, legend_rows - 1)
+    fig.tight_layout(rect=(0, bottom_margin, 1, 1))
 
     os.makedirs(args.outdir, exist_ok=True)
     out_path = os.path.join(args.outdir, args.outfile)

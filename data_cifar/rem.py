@@ -37,6 +37,9 @@ class REM(nn.Module):
 
         self.entropy = Entropy()
         self.tokens = 576
+        self.last_mcl = 0.0
+        self.last_erl = 0.0
+        self.last_eml = 0.0
         
     def forward(self, x):
         if self.episodic:
@@ -102,11 +105,13 @@ class REM(nn.Module):
                 outputs_list.append(out)
         self.model.train()
 
-        loss = 0.0
+        mcl_loss = None
         for i in range(1, len(self.mn)):
-            loss += softmax_entropy(outputs_list[i], outputs_list[0].detach()).mean()
+            term = softmax_entropy(outputs_list[i], outputs_list[0].detach()).mean()
+            mcl_loss = term if mcl_loss is None else (mcl_loss + term)
             for j in range(1, i):
-                loss += softmax_entropy(outputs_list[i], outputs_list[j].detach()).mean()
+                term_ij = softmax_entropy(outputs_list[i], outputs_list[j].detach()).mean()
+                mcl_loss = term_ij if mcl_loss is None else (mcl_loss + term_ij)
 
         entropys = [self.entropy(out) for out in outputs_list]
         lossn = 0.0
@@ -115,11 +120,20 @@ class REM(nn.Module):
             for j in range(i + 1, len(self.mn)):
                 lossn += (F.relu(entropys[i] - entropys[j].detach() + margin)).mean()
         
-        loss = loss + self.lamb * lossn
+        loss = (mcl_loss if mcl_loss is not None else 0.0) + self.lamb * lossn
         
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
+        try:
+            self.last_mcl = float((mcl_loss if mcl_loss is not None else 0.0).detach().item()) if isinstance(mcl_loss, torch.Tensor) else float(mcl_loss)
+        except Exception:
+            self.last_mcl = 0.0
+        try:
+            self.last_erl = float(lossn.detach().item()) if isinstance(lossn, torch.Tensor) else float(lossn)
+        except Exception:
+            self.last_erl = 0.0
+        self.last_eml = 0.0
         return outputs
 
 @torch.jit.script

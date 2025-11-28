@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 from contextlib import nullcontext
 from collections import OrderedDict
 
@@ -112,7 +113,7 @@ def evaluate(description):
             metrics = compute_metrics(
                 model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
             )
-            acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total = metrics
+            acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = metrics
             err = 1. - acc
             all_error.append(err)
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
@@ -121,6 +122,9 @@ def evaluate(description):
             logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
             logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
             logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
+            logger.info(f"MCL (last batch) [{corruption_type}{severity}]: {mcl_last:.6f}")
+            logger.info(f"ERL (last batch) [{corruption_type}{severity}]: {erl_last:.6f}")
+            logger.info(f"EML (last batch) [{corruption_type}{severity}]: {eml_last:.6f}")
             # New metrics per corruption (averaged per corruption)
             logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
             logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
@@ -152,6 +156,27 @@ def evaluate(description):
                 logger.info(f"Catastrophic Forgetting Rate (prev-domain, lower is better) after [{corruption_type}{severity}]: {cfr_measured:.4f}")
             prev_x, prev_y, prev_acc_at_time = x_test, y_test, acc
 
+    # Save checkpoint after full evaluation if requested
+    try:
+        if args.save_ckpt:
+            method = str(cfg.MODEL.ADAPTATION).lower()
+            arch_tag = str(cfg.MODEL.ARCH).replace('/', '').replace('-', '').replace('_', '').lower()
+            dataset_tag = 'cifar100c'
+            ckpt_dir = '/users/doloriel/work/Repo/M2A/ckpt'
+            os.makedirs(ckpt_dir, exist_ok=True)
+            mask_tag = f"_{str(args.random_masking).lower()}" if (method == 'm2a' and getattr(args, 'random_masking', None)) else ""
+            filename = f"{method}_{arch_tag}{mask_tag}_{dataset_tag}.pth"
+            path = os.path.join(ckpt_dir, filename)
+            save_model = model
+            if hasattr(save_model, 'model'):
+                save_model = save_model.model
+            if hasattr(save_model, 'module'):
+                save_model = save_model.module
+            torch.save({'model': save_model.state_dict()}, path)
+            logger.info(f"Saved checkpoint to: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to save checkpoint: {e}")
+
             # No directional-stability logging; focusing on standard and confidence metrics
 
 
@@ -168,7 +193,7 @@ def compute_metrics(model: nn.Module,
                     device: torch.device = None):
     """Compute ACC, NLL, ECE, mean Max-Softmax, mean Entropy, mean cosine(pred_softmax, target_onehot)
     and accumulate adaptation timing/MACs during M2A CTTA.
-    Returns (acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total)
+    Returns (acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last)
     """
     if device is None:
         device = x.device
@@ -256,7 +281,16 @@ def compute_metrics(model: nn.Module,
             cos_sum += float(cos_b.sum().item())
 
     if total_eval == 0:
-        return 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total
+        mcl_last = getattr(model, 'last_mcl', 0.0)
+        erl_last = getattr(model, 'last_erl', 0.0)
+        eml_last = getattr(model, 'last_eml', 0.0)
+        try:
+            mcl_last = float(mcl_last)
+            erl_last = float(erl_last)
+            eml_last = float(eml_last)
+        except Exception:
+            mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
 
     acc = correct / total_eval
     nll = nll_sum / total_eval
@@ -266,7 +300,16 @@ def compute_metrics(model: nn.Module,
     confs_all = torch.cat(confs_all) if len(confs_all) else torch.empty(0)
     correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
     ece = compute_ece(confs_all, correct_all)
-    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total
+    mcl_last = getattr(model, 'last_mcl', 0.0)
+    erl_last = getattr(model, 'last_erl', 0.0)
+    eml_last = getattr(model, 'last_eml', 0.0)
+    try:
+        mcl_last = float(mcl_last)
+        erl_last = float(erl_last)
+        eml_last = float(eml_last)
+    except Exception:
+        mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
+    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
 
 
 def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
