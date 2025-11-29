@@ -76,9 +76,9 @@ def apply_frequency_mask(x: torch.Tensor, mask_percent: float, spectral_type: st
             if st == 'low':
                 allowed = torch.zeros((H, W), device=x.device, dtype=torch.bool)
                 allowed[:h2, :w2] = True
-            else:
-                allowed = torch.ones((H, W), device=x.device, dtype=torch.bool)
-                allowed[:h2, :w2] = False
+            else:  # 'high' -> only bottom-right quadrant (Q4)
+                allowed = torch.zeros((H, W), device=x.device, dtype=torch.bool)
+                allowed[h2:, w2:] = True
         allowed_idx = allowed.view(-1).nonzero().squeeze(1)
         max_choose = int(allowed_idx.numel())
         choose_k = min(k, max_choose)

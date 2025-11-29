@@ -10,7 +10,7 @@
 #SBATCH --partition=small-g
 #SBATCH --time=24:00:00
 #SBATCH --account=project_465002264
-#SBATCH --output=logs/cifar100c/output_%j.txt
+#SBATCH --output=logs/cifar10c/output_%j.txt
 
 # Use node-local scratch for MIOpen DB (avoid Lustre/NFS locking issues)
 MIOPEN_LOCAL="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}/${USER}/miopen-${SLURM_JOB_ID}"
@@ -24,10 +24,6 @@ export MIOPEN_FIND_MODE=1
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
-# ------------------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------------------
-# --plot_loss --plot_ema_alpha 0.9 --plot_loss_path plots/M2A/Loss/losses_marn_amr-1k.png \
-
 # cd data_cifar
 # python -m cifar100c_vit_m2a \
 #      --cfg cfgs/cifar100/m2a.yaml \
@@ -36,9 +32,9 @@ conda activate m2a
 #      --seed 1 \
 #      --lamb 1.0 \
 #      --margin 0.0 \
-#      --random_masking spatial \
+#      --random_masking spectral \
 #      --spatial_type patch \
-#      --spectral_type all \
+#      --spectral_type high \
 #      --num_squares 1 \
 #      --mask_type binary \
 #      --m 0.1 \
