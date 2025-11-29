@@ -41,7 +41,7 @@ conda activate m2a
 #       --m 0.1 \
 #       --n 3 \
 #       --steps 1 \
-#       --lr 1e-6 \
+#       --lr 1e-3 \
 #       --lamb 1.0 \
 #       --disable_eml \
 #       CORRUPTION.NUM_EX 764
@@ -55,7 +55,7 @@ python -m mrsffiac_m2a \
       --m 0.1 \
       --n 3 \
       --steps 1 \
-      --lr 1e-4 \
+      --lr 1e-3 \
       --lamb 1.0 \
       --random_masking spatial \
       --spatial_type patch \

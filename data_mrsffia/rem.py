@@ -147,6 +147,7 @@ class Entropy(nn.Module):
         return -(logits.softmax(1) * logits.log_softmax(1)).sum(1)
 
 
+
 def collect_params(model):
     """Collect all trainable parameters.
 
@@ -161,6 +162,24 @@ def collect_params(model):
         # skip top layers for adaptation: layer4 for ResNets and blocks9-11 for Vit-Base
         if 'layer4' in nm:
             continue
+        # if 'blocks.0' in nm:
+        #     continue
+        # if 'blocks.1' in nm:
+        #     continue
+        # if 'blocks.2' in nm:
+        #     continue
+        # if 'blocks.3' in nm:
+        #     continue
+        # if 'blocks.4' in nm:
+        #     continue
+        # if 'blocks.5' in nm:
+        #     continue
+        # if 'blocks.6' in nm:
+        #     continue
+        # if 'blocks.7' in nm:
+        #     continue
+        # if 'blocks.8' in nm:
+        #     continue
         if 'blocks.9' in nm:
             continue
         if 'blocks.10' in nm:
@@ -171,11 +190,11 @@ def collect_params(model):
             continue
         if nm in ['norm']:
             continue
-        if isinstance(m, nn.LayerNorm):
+        if 'blocks.' in nm and isinstance(m, (nn.LayerNorm,)):
            for np, p in m.named_parameters():
                if np in ['weight', 'bias'] and p.requires_grad:
                    params.append(p)
-                   #print(nm, np)
+                #    print(nm, np)
 
     return params
 

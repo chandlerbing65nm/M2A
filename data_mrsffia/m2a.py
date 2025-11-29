@@ -329,7 +329,7 @@ def collect_params(model):
             continue
         if nm in ['norm']:
             continue
-        if isinstance(m, nn.LayerNorm):
+        if 'blocks.' in nm and isinstance(m, (nn.LayerNorm,)):
            for np, p in m.named_parameters():
                if np in ['weight', 'bias'] and p.requires_grad:
                    params.append(p)
