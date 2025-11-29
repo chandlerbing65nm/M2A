@@ -17,12 +17,11 @@ def parse_loss_series(log_path: str, loss_name: str) -> Tuple[List[str], List[fl
     token = loss_name.strip().upper()
     assert token in {"MCL", "ERL", "EML"}, "--loss must be one of: MCL, ERL, EML"
 
-    # Example line:
+    # Example lines (old/new):
     # [..] MCL (last batch) [gaussian_noise5]: 1.240985
-    # [..] ERL (last batch) [gaussian_noise5]: 0.000000
-    # [..] EML (last batch) [gaussian_noise5]: 0.221503
+    # [..] MCL (avg per corruption) [gaussian_noise5]: 1.831371
     pattern = re.compile(
-        r"\]:\s*(?P<metric>MCL|ERL|EML)\s*\(last batch\)\s*\[(?P<corr>[^\]]+)\]:\s*(?P<val>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)"
+        r"\]:\s*(?P<metric>MCL|ERL|EML)\s*\((?:last batch|avg per corruption)\)\s*\[(?P<corr>[^\]]+)\]:\s*(?P<val>[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)"
     )
 
     corrs: List[str] = []
@@ -123,7 +122,7 @@ def main():
     # Plot
     plt.figure(figsize=(10, 5))
     for ys, name in zip(aligned_series_y, args.names):
-        line, = plt.plot(xs_common, ys, label=name, linewidth=3)
+        line, = plt.plot(xs_common, ys, label=name, linewidth=5)
         if args.moving_avg is not None and isinstance(args.moving_avg, int) and args.moving_avg > 1 and len(ys) > 0:
             w = args.moving_avg
             kernel = np.ones(w, dtype=float)
@@ -139,21 +138,24 @@ def main():
 
     # Axis labels
     base_fs = float(plt.rcParams.get('font.size', 7.0))
-    label_fs = base_fs * 1.7
-    tick_fs = base_fs * 1.3
-    plt.xlabel('Corruptions', fontdict={'size': label_fs, 'weight': 'bold'})
-    plt.ylabel(loss_token, fontdict={'size': label_fs, 'weight': 'bold'})
+    title_fs = base_fs * 2.5
+    xlabel_fs = base_fs * 2.5
+    tick_fs = base_fs * 1.5
+    legend_fs = base_fs * 1.7
+    plt.xlabel('Corruptions', fontdict={'size': xlabel_fs, 'weight': 'bold'})
+    # No y-axis label (as requested)
     ax = plt.gca()
     ax.tick_params(axis='both', which='major', labelsize=tick_fs)
-    leg = plt.legend(prop={'size': label_fs, 'weight': 'bold'})
-    # Dynamic title based on selected loss, styled like legend
+    # Legend labels (from --names): bold and 1.5x base font size
+    leg = plt.legend(prop={'size': legend_fs, 'weight': 'bold'})
+    # Dynamic title based on selected loss
     if loss_token == 'MCL':
         title_str = 'Mask Consistency Loss (MCL)'
     elif loss_token == 'EML':
         title_str = 'Entropy Minimization Loss (EML)'
     else:  # 'ERL'
         title_str = 'Entropy Ranking Loss (ERL)'
-    plt.title(title_str, fontdict={'size': label_fs, 'weight': 'bold'})
+    plt.title(title_str, fontdict={'size': title_fs, 'weight': 'bold'})
     # X-axis ticks with corruption abbreviations
     tick_labels = [ABBR.get(b, b.upper()) for b in global_order]
     plt.xticks(xs_common, tick_labels)

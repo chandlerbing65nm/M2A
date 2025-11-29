@@ -110,6 +110,12 @@ def evaluate(description):
             # No divisibility requim2aent for spatial masking (pixel-level squares)
             # No directional metrics reset; focusing on standard/confidence metrics
 
+            # Reset per-corruption M2A loss statistics if available
+            if hasattr(model, 'reset_loss_stats'):
+                try:
+                    model.reset_loss_stats()
+                except Exception:
+                    pass
             metrics = compute_metrics(
                 model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
             )
@@ -122,9 +128,9 @@ def evaluate(description):
             logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
             logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
             logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
-            logger.info(f"MCL (last batch) [{corruption_type}{severity}]: {mcl_last:.6f}")
-            logger.info(f"ERL (last batch) [{corruption_type}{severity}]: {erl_last:.6f}")
-            logger.info(f"EML (last batch) [{corruption_type}{severity}]: {eml_last:.6f}")
+            logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
+            logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
+            logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
             # New metrics per corruption (averaged per corruption)
             logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
             logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
@@ -300,15 +306,30 @@ def compute_metrics(model: nn.Module,
     confs_all = torch.cat(confs_all) if len(confs_all) else torch.empty(0)
     correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
     ece = compute_ece(confs_all, correct_all)
+    # Prefer per-corruption averages if M2A exposes accumulators
     mcl_last = getattr(model, 'last_mcl', 0.0)
     erl_last = getattr(model, 'last_erl', 0.0)
     eml_last = getattr(model, 'last_eml', 0.0)
     try:
-        mcl_last = float(mcl_last)
-        erl_last = float(erl_last)
-        eml_last = float(eml_last)
+        count = float(getattr(model, 'loss_count', 0.0))
+        if count > 0.0:
+            mcl_sum = float(getattr(model, 'mcl_sum', 0.0))
+            erl_sum = float(getattr(model, 'erl_sum', 0.0))
+            eml_sum = float(getattr(model, 'eml_sum', 0.0))
+            mcl_last = mcl_sum / count
+            erl_last = erl_sum / count
+            eml_last = eml_sum / count
+        else:
+            mcl_last = float(mcl_last)
+            erl_last = float(erl_last)
+            eml_last = float(eml_last)
     except Exception:
-        mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
+        try:
+            mcl_last = float(mcl_last)
+            erl_last = float(erl_last)
+            eml_last = float(eml_last)
+        except Exception:
+            mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
     return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
 
 

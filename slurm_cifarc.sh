@@ -28,31 +28,10 @@ conda activate m2a
 # ------------------------------------------------------------------------------------------
 # --plot_loss --plot_ema_alpha 0.9 --plot_loss_path plots/M2A/Loss/losses_marn_amr-1k.png \
 
-cd /users/doloriel/work/Repo/M2A/data_cifar
-python -m cifar100c_vit_m2a \
-     --cfg cfgs/cifar100/m2a.yaml \
-     --data_dir /scratch/project_465002264/datasets/cifar100c \
-     --lr 1e-3 \
-     --seed 1 \
-     --lamb 1.0 \
-     --margin 0.0 \
-     --random_masking spatial \
-     --spatial_type patch \
-     --spectral_type all \
-     --num_squares 1 \
-     --mask_type binary \
-     --m 0.1 \
-     --n 3 \
-     --mcl_distance ce \
-     --steps 1 \
-     --disable_erl \
-     --save_ckpt \
-     CORRUPTION.NUM_EX 10000
-
-# cd /users/doloriel/work/Repo/M2A/data_cifar
-# python -m cifar10c_vit_m2a \
-#      --cfg cfgs/cifar10/m2a.yaml \
-#      --data_dir /scratch/project_465002264/datasets/cifar10c \
+# cd data_cifar
+# python -m cifar100c_vit_m2a \
+#      --cfg cfgs/cifar100/m2a.yaml \
+#      --data_dir /scratch/project_465002264/datasets/cifar100c \
 #      --lr 1e-3 \
 #      --seed 1 \
 #      --lamb 1.0 \
@@ -67,13 +46,30 @@ python -m cifar100c_vit_m2a \
 #      --mcl_distance ce \
 #      --steps 1 \
 #      --disable_erl \
-#      --save_ckpt \
-#      CORRUPTION.NUM_EX 10000
+#      CORRUPTION.NUM_EX 100000
 
+cd data_cifar
+python -m cifar10c_vit_m2a \
+     --cfg cfgs/cifar10/m2a.yaml \
+     --data_dir /scratch/project_465002264/datasets/cifar10c \
+     --lr 1e-3 \
+     --seed 1 \
+     --lamb 1.0 \
+     --margin 0.0 \
+     --random_masking spatial \
+     --spatial_type patch \
+     --spectral_type all \
+     --num_squares 1 \
+     --mask_type binary \
+     --m 0.1 \
+     --n 3 \
+     --mcl_distance ce \
+     --steps 1 \
+     --disable_erl \
+     CORRUPTION.NUM_EX 100000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_rem \
 #      --cfg cfgs/cifar10/rem.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --save_ckpt \
 #      CORRUPTION.NUM_EX 10000

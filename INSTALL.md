@@ -25,4 +25,4 @@ The provided `requirements.txt` already includes the necessary versions and fetc
 python -c "import torch, numpy, timm, robustbench; print(torch.__version__, numpy.__version__)"
 ```
 
-If imports succeed without warnings, the environment is ready for scripts under `cifar/` and `imagenet/`.
+If imports succeed without warnings, the environment is ready for scripts under `data_cifar/` and `data_imagenet/`.

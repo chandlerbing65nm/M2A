@@ -480,6 +480,10 @@ class M2A(nn.Module):
         self.last_mcl = 0.0
         self.last_erl = 0.0
         self.last_eml = 0.0
+        self.mcl_sum = 0.0
+        self.erl_sum = 0.0
+        self.eml_sum = 0.0
+        self.loss_count = 0.0
 
     @contextmanager
     def no_adapt_mode(self):
@@ -659,6 +663,12 @@ class M2A(nn.Module):
         if self.model_state is None or self.optimizer_state is None:
             raise Exception("cannot reset without saved model/optimizer state")
         load_model_and_optimizer(self.model, self.optimizer, self.model_state, self.optimizer_state)
+
+    def reset_loss_stats(self):
+        self.mcl_sum = 0.0
+        self.erl_sum = 0.0
+        self.eml_sum = 0.0
+        self.loss_count = 0.0
 
     @torch.enable_grad()
     def forward(self, x: torch.Tensor):
@@ -935,18 +945,29 @@ class M2A(nn.Module):
         erl_plot_val = erl_loss if erl_loss is not None else torch.tensor(0.0, device=x.device)
         self._update_and_plot_losses(mcl_val=mcl_plot_val, erl_val=erl_plot_val)
 
+        # Convert to scalars and accumulate per-corruption sums
         try:
-            self.last_mcl = float(mcl_plot_val.detach().item())
+            mcl_val = float(mcl_plot_val.detach().item())
         except Exception:
-            self.last_mcl = 0.0
+            mcl_val = 0.0
         try:
-            self.last_erl = float(erl_plot_val.detach().item())
+            erl_val = float(erl_plot_val.detach().item())
         except Exception:
-            self.last_erl = 0.0
+            erl_val = 0.0
         try:
-            self.last_eml = float(eml_loss.detach().item()) if eml_loss is not None else 0.0
+            eml_val = float(eml_loss.detach().item()) if eml_loss is not None else 0.0
         except Exception:
-            self.last_eml = 0.0
+            eml_val = 0.0
+
+        batch_weight = float(x.shape[0])
+        self.mcl_sum += mcl_val * batch_weight
+        self.erl_sum += erl_val * batch_weight
+        self.eml_sum += eml_val * batch_weight
+        self.loss_count += batch_weight
+
+        self.last_mcl = mcl_val
+        self.last_erl = erl_val
+        self.last_eml = eml_val
 
         # Return full-batch predictions
         return outputs_list[0]

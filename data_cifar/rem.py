@@ -40,6 +40,10 @@ class REM(nn.Module):
         self.last_mcl = 0.0
         self.last_erl = 0.0
         self.last_eml = 0.0
+        self.mcl_sum = 0.0
+        self.erl_sum = 0.0
+        self.eml_sum = 0.0
+        self.loss_count = 0.0
         
     def forward(self, x):
         if self.episodic:
@@ -58,10 +62,17 @@ class REM(nn.Module):
         # self.model_state, self.optimizer_state, _, _ = \
         #     copy_model_and_optimizer(self.model, self.optimizer)
 
+    def reset_loss_stats(self):
+        self.mcl_sum = 0.0
+        self.erl_sum = 0.0
+        self.eml_sum = 0.0
+        self.loss_count = 0.0
+
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x, optimizer):
         outputs, attn = self.model(x, return_attn=True) # [20,577,10], [20, 12, 577, 577]
+        B = x.shape[0]
         attn_score = attn.mean(dim=1)[:, 0, 1:]
         len_keeps = []
         outputs_list = []
@@ -126,13 +137,19 @@ class REM(nn.Module):
         optimizer.step()
         optimizer.zero_grad()
         try:
-            self.last_mcl = float((mcl_loss if mcl_loss is not None else 0.0).detach().item()) if isinstance(mcl_loss, torch.Tensor) else float(mcl_loss)
+            mcl_val = float((mcl_loss if mcl_loss is not None else 0.0).detach().item()) if isinstance(mcl_loss, torch.Tensor) else float(mcl_loss if mcl_loss is not None else 0.0)
         except Exception:
-            self.last_mcl = 0.0
+            mcl_val = 0.0
         try:
-            self.last_erl = float(lossn.detach().item()) if isinstance(lossn, torch.Tensor) else float(lossn)
+            erl_val = float(lossn.detach().item()) if isinstance(lossn, torch.Tensor) else float(lossn)
         except Exception:
-            self.last_erl = 0.0
+            erl_val = 0.0
+        batch_weight = float(B)
+        self.mcl_sum += mcl_val * batch_weight
+        self.erl_sum += erl_val * batch_weight
+        self.loss_count += batch_weight
+        self.last_mcl = mcl_val
+        self.last_erl = erl_val
         self.last_eml = 0.0
         return outputs
 
