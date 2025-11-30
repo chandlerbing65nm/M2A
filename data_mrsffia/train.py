@@ -123,6 +123,8 @@ def build_transforms(cfg: TrainConfig) -> Tuple[transforms.Compose, transforms.C
     train_list = [
         # transforms.Resize(256),
         # transforms.CenterCrop(224),
+        # transforms.Resize(64),
+        # transforms.Resize(256),
         transforms.RandomResizedCrop(224),
         transforms.RandomHorizontalFlip(),
     ]
