@@ -217,6 +217,8 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--data_dir", default="your_data_path", type=str)
     parser.add_argument("--checkpoint", default="./ckpt", type=str)
     parser.add_argument("--unc_thr", default=0.2, type=float)
+    parser.add_argument("--size", default=224, type=int,
+                        help="Input resolution for ViT/MAE models (e.g., 224 for vit_base_patch16_224).")
     parser.add_argument("--seed", default=None, type=int,
                         help="Override RNG_SEED; if set, seeds numpy/torch/(cuda) and Python RNG")
     parser.add_argument("--random_masking", type=str, default=None,
@@ -240,7 +242,16 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--disable_eml", action="store_true",
                         help="Disable the Entropy Minimization Loss (EML) term")
 
-    
+    parser.add_argument("--batch_size", type=int, default=None,
+                        help="Batch size for evaluation. Overrides TEST.BATCH_SIZE if provided.")
+    parser.add_argument("--lr", type=float, default=None,
+                        help="Optimizer learning rate for test-time adaptation. Overrides OPTIM.LR if provided.")
+
+    parser.add_argument("--use_hog", action="store_true",
+                    help="if use hog")
+    parser.add_argument("--hog_ratio", type=float,
+                    help="hog ratio")
+
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
@@ -251,6 +262,10 @@ def load_cfg_fom_args(description="Config options."):
 
     cfg.DATA_DIR = args.data_dir
     cfg.TEST.ckpt = args.checkpoint
+
+    cfg.use_hog = args.use_hog
+    cfg.hog_ratio = args.hog_ratio
+
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)
     # Map M2A CLI args
@@ -273,6 +288,19 @@ def load_cfg_fom_args(description="Config options."):
         cfg.M2A.DISABLE_ERL = True
     if args.disable_eml:
         cfg.M2A.DISABLE_EML = True
+
+    if args.batch_size is not None:
+        try:
+            cfg.defrost()
+        except Exception:
+            pass
+        cfg.TEST.BATCH_SIZE = int(args.batch_size)
+    if args.lr is not None:
+        try:
+            cfg.defrost()
+        except Exception:
+            pass
+        cfg.OPTIM.LR = float(args.lr)
 
     log_dest = os.path.basename(args.cfg_file)
     log_dest = log_dest.replace('.yaml', '_{}.txt'.format(current_time))

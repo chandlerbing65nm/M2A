@@ -124,7 +124,7 @@ def fmt_std(v: float, decimals: int = 2) -> str:
     return f"{v:.{decimals}f}"
 
 
-def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dict[str, List[str]], per_log_vals: Dict[str, Dict[str, List[float]]]):
+def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dict[str, List[str]], per_log_vals: Dict[str, Dict[str, List[float]]], selected_metric=None):
     order = [
         "Error",
         "NLL",
@@ -134,6 +134,11 @@ def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dic
         "Domain Shift Robustness",
         "Catastrophic Forgetting Rate",
     ]
+    if selected_metric:
+        key = selected_metric.strip().lower()
+        mapping = {m.lower(): m for m in order}
+        if key in mapping:
+            order = [mapping[key]]
     for metric in order:
         values_by_corr = convert_units(agg.get(metric, {}), metric)
         print(f"\nMetric: {metric}")
@@ -205,6 +210,7 @@ def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dic
 def main():
     parser = argparse.ArgumentParser(description="Aggregate corruption-wise metrics across multiple logs.")
     parser.add_argument("logs", nargs="*", type=str, help="Paths to log files to parse")
+    parser.add_argument("--metric", type=str, default=None, help="Single metric to print (e.g., Error, NLL, ECE)")
     args = parser.parse_args()
 
     default_logs = [
@@ -215,7 +221,7 @@ def main():
     log_paths = [Path(p) for p in (args.logs if args.logs else default_logs)]
 
     agg, order_by_metric, per_log_vals = aggregate_across_logs(log_paths)
-    print_aggregate(agg, order_by_metric, per_log_vals)
+    print_aggregate(agg, order_by_metric, per_log_vals, selected_metric=args.metric)
 
 
 if __name__ == "__main__":

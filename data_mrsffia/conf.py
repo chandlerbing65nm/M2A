@@ -247,7 +247,11 @@ def load_cfg_fom_args(description="Config options."):
                         help="Optimizer learning rate for test-time adaptation. Overrides OPTIM.LR if provided.")
     parser.add_argument("--lamb", type=float, default=None,
                         help="REM/M2A lambda weight for the ranking/consistency loss. Overrides OPTIM.LAMB if provided.")
-
+    
+    parser.add_argument("--use_hog", action="store_true",
+                    help="if use hog")
+    parser.add_argument("--hog_ratio", type=float,
+                    help="hog ratio")
     
     if len(sys.argv) == 1:
         parser.print_help()
@@ -259,6 +263,10 @@ def load_cfg_fom_args(description="Config options."):
 
     cfg.DATA_DIR = args.data_dir
     cfg.TEST.ckpt = args.checkpoint
+
+    cfg.use_hog = args.use_hog
+    cfg.hog_ratio = args.hog_ratio
+
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)
     # Map optimization CLI args

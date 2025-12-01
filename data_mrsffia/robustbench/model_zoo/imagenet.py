@@ -49,11 +49,6 @@ linf = OrderedDict(
             'gdrive_id': '',
             'preprocessing': 'Res256Crop224'
         }),
-        ('Standard_VITB_MAE', {
-            'model': lambda: create_model_mae("vit_base_patch16_224", pretrained=True),
-            'gdrive_id': '',
-            'preprocessing': 'Res256Crop224'
-        }),
         ('Standard_VITB_Ours', {
             'model': lambda: create_model_ours("vit_base_patch16_224", pretrained=True),
             'gdrive_id': '',
