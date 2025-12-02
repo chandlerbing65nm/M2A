@@ -18,17 +18,6 @@ import random
 
 logger = logging.getLogger(__name__)
 
-
-def rm_substr_from_state_dict(state_dict, substr):
-    new_state_dict = OrderedDict()
-    for key in state_dict.keys():
-        if substr in key:  # to delete prefix 'module.' if it exists
-            new_key = key[len(substr):]
-            new_state_dict[new_key] = state_dict[key]
-        else:
-            new_state_dict[key] = state_dict[key]
-    return new_state_dict
-
 def evaluate(description):
     args = load_cfg_fom_args(description)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -69,13 +58,15 @@ def evaluate(description):
     mask_token = nn.Parameter(torch.zeros(*mask_token_dim, device=device), requires_grad=True)
     # mask_token = nn.DataParallel(mask_token) # make parallel
     mask_token.to(device)
-
+    
 
     if cfg.MODEL.ADAPTATION == "Continual_MAE":
         logger.info("test-time adaptation: Continual_MAE")
         model = setup_continual_mae(base_model, hogs=hogs, projections=projections, mask_token=mask_token, hog_ratio=cfg.hog_ratio, cfg=cfg)
     else:
         raise ValueError("Unknown adaptation method: {}".format(cfg.MODEL.ADAPTATION))
+    if getattr(args, "print_model", False):
+        return
     
     All_error = []
     for severity in cfg.CORRUPTION.SEVERITY:
@@ -148,6 +139,7 @@ def setup_continual_mae(model, hogs=None, projections=None, mask_token=None, hog
                            mt_alpha=cfg.OPTIM.MT, 
                            rst_m=cfg.OPTIM.RST, 
                            ap=cfg.OPTIM.AP)
+    logger.info(f"model for adaptation: %s", cotta_model)
     logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return cotta_model

@@ -33,6 +33,9 @@ def evaluate(description):
     else:
         raise NotImplementedError
 
+    if getattr(args, "print_model", False):
+        return
+
     # evaluate on each severity and type of corruption in turn
     prev_ct = "x0"
     All_error = []
@@ -60,7 +63,7 @@ def evaluate(description):
 
 def setup_vida(args, model):
     model = vida.configure_model(model, cfg)
-    model_param, vida_param = vida.collect_params(model)
+    model_param, vida_param, param_names = vida.collect_params(model)
     optimizer = setup_optimizer_vida(model_param, vida_param, cfg.OPTIM.LR, cfg.OPTIM.ViDALR)
     vida_model = vida.ViDA(model, optimizer,
                            steps=cfg.OPTIM.STEPS,
@@ -69,7 +72,8 @@ def setup_vida(args, model):
                            ema = cfg.OPTIM.MT,
                            ema_vida = cfg.OPTIM.MT_ViDA,
                            )
-    logger.info(f"model for adaptation: %s", model)
+    logger.info(f"model for adaptation: %s", vida_model)
+    logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return vida_model
 

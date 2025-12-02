@@ -149,6 +149,9 @@ _C.TEST.vida_rank2 = 128
 _C.OPTIM.MT_ViDA = 0.999
 _C.OPTIM.MT = 0.999
 
+# Misc flags
+_C.PRINT_MODEL = False
+
 # REM parameters
 _C.OPTIM.M = 0.1
 _C.OPTIM.N = 3
@@ -251,6 +254,8 @@ def load_cfg_fom_args(description="Config options."):
                     help="if use hog")
     parser.add_argument("--hog_ratio", type=float,
                     help="hog ratio")
+    parser.add_argument("--print_model", action="store_true",
+                        help="Print only model/parameter/optimizer info and exit before evaluation.")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -265,6 +270,7 @@ def load_cfg_fom_args(description="Config options."):
 
     cfg.use_hog = args.use_hog
     cfg.hog_ratio = args.hog_ratio
+    cfg.PRINT_MODEL = bool(getattr(args, "print_model", False))
 
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)

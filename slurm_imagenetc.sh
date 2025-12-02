@@ -24,49 +24,60 @@ export MIOPEN_FIND_MODE=1
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
-# cd /users/doloriel/work/Repo/M2A/data_imagenet
-# python -m imagenetc_m2a \
-#       --cfg cfgs/vit/m2a.yaml \
-#       --data_dir /scratch/project_465002264/datasets/imagenetc \
-#       --seed 1 \
-#       --random_masking spatial \
-#       --spatial_type patch \
-#       --spectral_type all \
-#       --num_squares 1 \
-#       --mask_type binary \
-#       --disable_erl \
-#       CORRUPTION.NUM_EX 5000
+cd /users/doloriel/work/Repo/M2A/data_imagenet
+python -m imagenetc \
+      --cfg cfgs/vit/source.yaml \
+      --data_dir /scratch/project_465002264/datasets/imagenetc \
+      --print_model \
+      CORRUPTION.NUM_EX 5000
 
-# cd /users/doloriel/work/Repo/M2A/data_imagenet
-# python -m imagenetc_rem \
-#       --cfg cfgs/vit/rem.yaml \
-#       --data_dir /scratch/project_465002264/datasets/imagenetc \
-#       CORRUPTION.NUM_EX 5000
+cd /users/doloriel/work/Repo/M2A/data_imagenet
+python -m imagenetc_tent \
+      --cfg cfgs/vit/tent.yaml \
+      --data_dir /scratch/project_465002264/datasets/imagenetc \
+      --print_model \
+      CORRUPTION.NUM_EX 5000
 
-# cd /users/doloriel/work/Repo/M2A/data_imagenet
-# python -m imagenetc_tent \
-#       --cfg cfgs/vit/tent.yaml \
-#       --data_dir /scratch/project_465002264/datasets/imagenetc \
-#       CORRUPTION.NUM_EX 5000
+cd /users/doloriel/work/Repo/M2A/data_imagenet
+python -m imagenetc_cotta \
+      --cfg cfgs/vit/cotta.yaml \
+      --data_dir /scratch/project_465002264/datasets/imagenetc \
+      --print_model \
+      CORRUPTION.NUM_EX 5000
 
-# cd /users/doloriel/work/Repo/M2A/data_imagenet
-# python -m imagenetc_cotta \
-#       --cfg cfgs/vit/cotta.yaml \
-#       --data_dir /scratch/project_465002264/datasets/imagenetc \
-#       CORRUPTION.NUM_EX 5000
-
-# cd /users/doloriel/work/Repo/M2A/data_imagenet
-# python -m imagenetc_vida \
-#       --cfg cfgs/vit/vida.yaml \
-#       --data_dir /scratch/project_465002264/datasets/imagenetc \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/imagent_vit_vida.pt \
-#       --lr 5e-07 \
-#       CORRUPTION.NUM_EX 5000
+cd /users/doloriel/work/Repo/M2A/data_imagenet
+python -m imagenetc_vida \
+      --cfg cfgs/vit/vida.yaml \
+      --data_dir /scratch/project_465002264/datasets/imagenetc \
+      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/imagent_vit_vida.pt \
+      --lr 5e-07 \
+      --print_model \
+      CORRUPTION.NUM_EX 5000
 
 cd /users/doloriel/work/Repo/M2A/data_imagenet
 python -m imagenetc_mae \
       --cfg cfgs/vit/continual_mae.yaml \
       --data_dir /scratch/project_465002264/datasets/imagenetc \
-      --use_hog --hog_ratio 0.5 \
-      --batch_size 10 --lr 1e-3 \
+      --print_model \
+      CORRUPTION.NUM_EX 5000
+
+cd /users/doloriel/work/Repo/M2A/data_imagenet
+python -m imagenetc_rem \
+      --cfg cfgs/vit/rem.yaml \
+      --data_dir /scratch/project_465002264/datasets/imagenetc \
+      --print_model \
+      CORRUPTION.NUM_EX 5000
+
+cd /users/doloriel/work/Repo/M2A/data_imagenet
+python -m imagenetc_m2a \
+      --cfg cfgs/vit/m2a.yaml \
+      --data_dir /scratch/project_465002264/datasets/imagenetc \
+      --seed 1 \
+      --random_masking spatial \
+      --spatial_type patch \
+      --spectral_type all \
+      --num_squares 1 \
+      --mask_type binary \
+      --disable_erl \
+      --print_model \
       CORRUPTION.NUM_EX 5000

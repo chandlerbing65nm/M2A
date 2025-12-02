@@ -33,6 +33,8 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "M2A":
         logger.info("test-time adaptation: M2A")
         model = setup_m2a(base_model)
+    if getattr(args, "print_model", False):
+        return
     # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -96,7 +98,7 @@ def setup_optimizer_m2a(params):
 
 def setup_m2a(model):
     model = m2a.configure_model(model)
-    params = m2a.collect_params(model)
+    params, param_names = m2a.collect_params(model)
     optimizer = setup_optimizer_m2a(params)
     m2a_model = m2a.M2A(
         model, optimizer,
@@ -116,7 +118,8 @@ def setup_m2a(model):
         disable_erl=cfg.M2A.DISABLE_ERL,
         disable_eml=cfg.M2A.DISABLE_EML,
     )
-    # logger.info(f"model for adaptation: %s", model)
+    logger.info(f"model for adaptation: %s", m2a_model)
+    logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return m2a_model
 

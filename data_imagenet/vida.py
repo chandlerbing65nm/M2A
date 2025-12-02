@@ -186,12 +186,14 @@ def collect_params(model):
     """
     vida_params_list = []
     model_params_lst = []
+    param_names = []
     for name, param in model.named_parameters():
         if 'vida_' in name:
             vida_params_list.append(param)
         else:
-            model_params_lst.append(param)     
-    return model_params_lst, vida_params_list
+            model_params_lst.append(param)
+        param_names.append(name)
+    return model_params_lst, vida_params_list, param_names
 
 
 def copy_model_and_optimizer(model, optimizer):

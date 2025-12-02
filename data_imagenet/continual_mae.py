@@ -215,41 +215,12 @@ def load_model_and_optimizer(model, optimizer, model_state, optimizer_state):
     optimizer.load_state_dict(optimizer_state)
 
 
-# def configure_model(model, cfg):
-#     """Configure model for use with tent."""
-#     # train mode, because tent optimizes the model to minimize entropy
-#     model.train()
-#     # disable grad, to (re-)enable only what we update
-#     model.requires_grad_(False)
-#     # enable all trainable
-#     for m in model.modules():
-#         if isinstance(m, nn.BatchNorm2d):
-#             m.requires_grad_(True)
-#             # force use of batch stats in train and eval modes
-#             m.track_running_stats = False
-#             m.running_mean = None
-#             m.running_var = None
-#         else:
-#             m.requires_grad_(True)
-#     return model
-
-
 def configure_model(model, cfg):
     """Configure model for use with tent."""
     # train mode, because tent optimizes the model to minimize entropy
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = model.cpu()
-    vida_params, vida_names = inject_trainable_vida(model = model, target_replace_module = ["CrossAttention", "Attention"], \
-            r = cfg.TEST.vida_rank1, r2 = cfg.TEST.vida_rank2)
-    # Optionally load a VIDA-specific checkpoint if provided and present.
-    # ckpt_path = "/users/doloriel/work/Repo/M2A/ckpt/imagent_vit_vida.pt"
-    # if os.path.isfile(ckpt_path):
-    #     model = torch.nn.DataParallel(model)  # make parallel
-    #     checkpoint = torch.load(ckpt_path, map_location="cpu")
-    #     model.load_state_dict(checkpoint, strict=True)
-    model.to(device)
     model.train()
-
+    # disable grad, to (re-)enable only what we update
+    model.requires_grad_(False)
     # enable all trainable
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
@@ -260,8 +231,37 @@ def configure_model(model, cfg):
             m.running_var = None
         else:
             m.requires_grad_(True)
-    
     return model
+
+
+# def configure_model(model, cfg):
+#     """Configure model for use with tent."""
+#     # train mode, because tent optimizes the model to minimize entropy
+#     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#     model = model.cpu()
+#     vida_params, vida_names = inject_trainable_vida(model = model, target_replace_module = ["CrossAttention", "Attention"], \
+#             r = cfg.TEST.vida_rank1, r2 = cfg.TEST.vida_rank2)
+#     # Optionally load a VIDA-specific checkpoint if provided and present.
+#     # ckpt_path = "/users/doloriel/work/Repo/M2A/ckpt/imagent_vit_vida.pt"
+#     # if os.path.isfile(ckpt_path):
+#     #     model = torch.nn.DataParallel(model)  # make parallel
+#     #     checkpoint = torch.load(ckpt_path, map_location="cpu")
+#     #     model.load_state_dict(checkpoint, strict=True)
+#     model.to(device)
+#     model.train()
+
+#     # enable all trainable
+#     for m in model.modules():
+#         if isinstance(m, nn.BatchNorm2d):
+#             m.requires_grad_(True)
+#             # force use of batch stats in train and eval modes
+#             m.track_running_stats = False
+#             m.running_mean = None
+#             m.running_var = None
+#         else:
+#             m.requires_grad_(True)
+    
+#     return model
 
 
 def check_model(model):

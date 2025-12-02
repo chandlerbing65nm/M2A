@@ -33,6 +33,8 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "REM":
         logger.info("test-time adaptation: REM")
         model = setup_rem(base_model)
+    if getattr(args, "print_model", False):
+        return
     # evaluate on each severity and type of corruption in turn
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
         for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -96,7 +98,7 @@ def setup_optimizer_rem(params):
 
 def setup_rem(model):
     model = rem.configure_model(model)
-    params = rem.collect_params(model)
+    params, param_names = rem.collect_params(model)
     optimizer = setup_optimizer_rem(params)
     rem_model = rem.REM(model, optimizer,
                            len_num_keep=cfg.OPTIM.KEEP,
@@ -107,7 +109,8 @@ def setup_rem(model):
                            lamb = cfg.OPTIM.LAMB,
                            margin = cfg.OPTIM.MARGIN,
                            )
-    # logger.info(f"model for adaptation: %s", model)
+    logger.info(f"model for adaptation: %s", rem_model)
+    logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return rem_model
 

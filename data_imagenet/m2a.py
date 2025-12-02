@@ -299,6 +299,7 @@ def collect_params(model):
     Note: other choices of parameterization are possible!
     """
     params = []
+    param_names = []
 
     for nm, m in model.named_modules():
         # skip top layers for adaptation: layer4 for ResNets and blocks9-11 for Vit-Base
@@ -318,9 +319,10 @@ def collect_params(model):
            for np, p in m.named_parameters():
                if np in ['weight', 'bias'] and p.requires_grad:
                    params.append(p)
+                   param_names.append(f"{nm}.{np}")
                    #print(nm, np)
 
-    return params
+    return params, param_names
 
 
 def copy_model_and_optimizer(model, optimizer):

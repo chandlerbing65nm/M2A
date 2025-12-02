@@ -32,6 +32,9 @@ def evaluate(description):
     else:
         raise NotImplementedError
 
+    if getattr(args, "print_model", False):
+        return
+
     # evaluate on each severity and type of corruption in turn
     prev_ct = "x0"
     All_error = []

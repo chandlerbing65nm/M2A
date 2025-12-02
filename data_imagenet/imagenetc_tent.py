@@ -31,6 +31,9 @@ def evaluate(description):
     else:
         raise NotImplementedError
 
+    if getattr(args, "print_model", False):
+        return
+
     # evaluate on each severity and type of corruption in turn
     All_error = []
     for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
@@ -67,7 +70,7 @@ def setup_tent(model):
     tent_model = tent.Tent(model, optimizer,
                            steps=cfg.OPTIM.STEPS,
                            episodic=cfg.MODEL.EPISODIC)
-    logger.info(f"model for adaptation: %s", model)
+    logger.info(f"model for adaptation: %s", tent_model)
     logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return tent_model
