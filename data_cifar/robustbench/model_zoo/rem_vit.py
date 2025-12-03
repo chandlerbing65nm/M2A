@@ -5,7 +5,7 @@ import math
 
 import torch.nn as nn
 import torch.nn.functional as F
-from .vision_transformer_rem import VisionTransformer as VisionTransformer_REM
+from .vision_transformer import VisionTransformer as VisionTransformer_REM
 from timm.models.vision_transformer import VisionTransformer
 from timm.models.registry import is_model, is_model_in_modules
 from timm.models.helpers import load_checkpoint
