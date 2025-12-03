@@ -105,7 +105,7 @@ def evaluate(description):
             method = str(cfg.MODEL.ADAPTATION).lower()
             arch_tag = str(cfg.MODEL.ARCH).replace('/', '').replace('-', '').replace('_', '').lower()
             dataset_tag = 'cifar100c'
-            ckpt_dir = '/users/doloriel/work/Repo/M2A/ckpt'
+            ckpt_dir = '/flash/project_465002264/projects/m2a/ckpt'
             os.makedirs(ckpt_dir, exist_ok=True)
             filename = f"{method}_{arch_tag}_{dataset_tag}.pth"
             path = os.path.join(ckpt_dir, filename)

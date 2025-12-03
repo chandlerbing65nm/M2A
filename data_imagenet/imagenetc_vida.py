@@ -1,4 +1,5 @@
 import logging
+import os
 
 import torch
 import torch.optim as optim
@@ -59,6 +60,26 @@ def evaluate(description):
             err = 1. - acc
             All_error.append(err)
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
+
+    # Save checkpoint after full evaluation if requested
+    try:
+        if args.save_ckpt:
+            method = str(cfg.MODEL.ADAPTATION).lower()
+            arch_tag = str(cfg.MODEL.ARCH).replace('/', '').replace('-', '').replace('_', '').lower()
+            dataset_tag = 'imagenetc'
+            ckpt_dir = '/flash/project_465002264/projects/m2a/ckpt'
+            os.makedirs(ckpt_dir, exist_ok=True)
+            filename = f"{method}_{arch_tag}_{dataset_tag}.pth"
+            path = os.path.join(ckpt_dir, filename)
+            save_model = model
+            if hasattr(save_model, 'model'):
+                save_model = save_model.model
+            if hasattr(save_model, 'module'):
+                save_model = save_model.module
+            torch.save({'model': save_model.state_dict()}, path)
+            logger.info(f"Saved checkpoint to: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to save checkpoint: {e}")
 
 
 def setup_vida(args, model):

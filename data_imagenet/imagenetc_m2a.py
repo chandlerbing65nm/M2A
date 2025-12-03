@@ -1,4 +1,5 @@
 import logging
+import os
 
 import torch
 import torch.optim as optim
@@ -62,6 +63,26 @@ def evaluate(description):
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
             logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
             logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+
+    try:
+        if getattr(args, "save_ckpt", False):
+            method = str(cfg.MODEL.ADAPTATION).lower()
+            arch_tag = str(cfg.MODEL.ARCH).replace('/', '').replace('-', '').replace('_', '').lower()
+            dataset_tag = 'imagenetc'
+            ckpt_dir = '/flash/project_465002264/projects/m2a/ckpt'
+            os.makedirs(ckpt_dir, exist_ok=True)
+            mask_tag = f"_{str(args.random_masking).lower()}" if (method == 'm2a' and getattr(args, 'random_masking', None)) else ""
+            filename = f"{method}_{arch_tag}{mask_tag}_{dataset_tag}.pth"
+            path = os.path.join(ckpt_dir, filename)
+            save_model = model
+            if hasattr(save_model, 'model'):
+                save_model = save_model.model
+            if hasattr(save_model, 'module'):
+                save_model = save_model.module
+            torch.save({'model': save_model.state_dict()}, path)
+            logger.info(f"Saved checkpoint to: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to save checkpoint: {e}")
             
 def setup_source(model):
     """Set up the baseline source model without adaptation."""
