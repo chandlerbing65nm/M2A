@@ -10,7 +10,7 @@
 #SBATCH --partition=small-g
 #SBATCH --time=24:00:00
 #SBATCH --account=project_465002264
-#SBATCH --output=logs/cifar10c/output_%j.txt
+#SBATCH --output=logs/cifar100c/output_%j.txt
 
 # Use node-local scratch for MIOpen DB (avoid Lustre/NFS locking issues)
 MIOPEN_LOCAL="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}/${USER}/miopen-${SLURM_JOB_ID}"
@@ -24,6 +24,31 @@ export MIOPEN_FIND_MODE=1
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
+# cd /users/doloriel/work/Repo/M2A/data_cifar
+# python -m cifar100c_vit_tent \
+#      --cfg cfgs/cifar100/tent.yaml \
+#      --data_dir /scratch/project_465002264/datasets/cifar100c \
+#      CORRUPTION.NUM_EX 10000
+
+# cd /users/doloriel/work/Repo/M2A/data_cifar
+# python -m cifar100c_vit_cotta \
+#      --cfg cfgs/cifar100/cotta.yaml \
+#      --data_dir /scratch/project_465002264/datasets/cifar100c \
+#      CORRUPTION.NUM_EX 10000
+
+cd /users/doloriel/work/Repo/M2A/data_cifar
+python -m cifar100c_vit_vida \
+     --cfg cfgs/cifar100/vida.yaml \
+     --data_dir /scratch/project_465002264/datasets/cifar100c \
+     --checkpoint /users/doloriel/work/Repo/M2A/ckpt/vit_1_128_vida_cifar100c.t7 \
+     CORRUPTION.NUM_EX 10000
+
+# cd /users/doloriel/work/Repo/M2A/data_cifar
+# python -m cifar100c_vit_rem \
+#      --cfg cfgs/cifar100/rem.yaml \
+#      --data_dir /scratch/project_465002264/datasets/cifar100c \
+#      CORRUPTION.NUM_EX 10000
+
 # cd data_cifar
 # python -m cifar100c_vit_m2a \
 #      --cfg cfgs/cifar100/m2a.yaml \
@@ -32,9 +57,9 @@ conda activate m2a
 #      --seed 1 \
 #      --lamb 1.0 \
 #      --margin 0.0 \
-#      --random_masking spectral \
+#      --random_masking spatial \
 #      --spatial_type patch \
-#      --spectral_type high \
+#      --spectral_type all \
 #      --num_squares 1 \
 #      --mask_type binary \
 #      --m 0.1 \
@@ -43,29 +68,3 @@ conda activate m2a
 #      --steps 1 \
 #      --disable_erl \
 #      CORRUPTION.NUM_EX 100000
-
-cd data_cifar
-python -m cifar10c_vit_m2a \
-     --cfg cfgs/cifar10/m2a.yaml \
-     --data_dir /scratch/project_465002264/datasets/cifar10c \
-     --lr 1e-3 \
-     --seed 1 \
-     --lamb 1.0 \
-     --margin 0.0 \
-     --random_masking spatial \
-     --spatial_type patch \
-     --spectral_type all \
-     --num_squares 1 \
-     --mask_type binary \
-     --m 0.1 \
-     --n 3 \
-     --mcl_distance ce \
-     --steps 1 \
-     --disable_erl \
-     CORRUPTION.NUM_EX 100000
-
-# cd /users/doloriel/work/Repo/M2A/data_cifar
-# python -m cifar10c_vit_rem \
-#      --cfg cfgs/cifar10/rem.yaml \
-#      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      CORRUPTION.NUM_EX 10000

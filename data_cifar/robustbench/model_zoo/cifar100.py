@@ -11,6 +11,7 @@ from robustbench.model_zoo.architectures.wide_resnet import WideResNet
 from robustbench.model_zoo.enums import ThreatModel
 import torch.nn as nn
 from .rem_vit import create_model_rem
+from .vit import create_model
 
 def modify_head(model):
     model.head = nn.Linear(model.head.in_features, 100)
@@ -223,7 +224,15 @@ linf = OrderedDict([
         'gdrive_id': '1-qUvfOjq6x4I8mZynfGtzzCH_nvqS_VQ'
     }),
     ('Standard_VITB', {
-    'model': lambda: modify_head(timm.create_model("vit_base_patch16_384", pretrained=True)),
+    'model': lambda: modify_head(create_model("vit_base_patch16_384", pretrained=True)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_REM', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=True)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_M2A', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=True)),
     'gdrive_id': '',
     }),
 ])
@@ -260,7 +269,7 @@ common_corruptions = OrderedDict([
       'gdrive_id': '1ocnHbvDdOBLvgNr6K7vEYL08hUdkD1Rv'
     }),
     ('Standard_VITB', {
-    'model': lambda: modify_head(timm.create_model("vit_base_patch16_384", pretrained=True)),
+    'model': lambda: modify_head(create_model("vit_base_patch16_384", pretrained=True)),
     'gdrive_id': '',
     }),
     ('Standard_VITB_REM', {
