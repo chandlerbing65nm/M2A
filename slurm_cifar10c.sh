@@ -36,11 +36,17 @@ conda activate m2a
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
 #      CORRUPTION.NUM_EX 10000
 
+# cd /users/doloriel/work/Repo/M2A/data_cifar
+# python -m cifar10c_vit_vida \
+#      --cfg cfgs/cifar10/vida.yaml \
+#      --data_dir /scratch/project_465002264/datasets/cifar10c \
+#      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/vit_1_128_vida_cifar10c.t7 \
+#      CORRUPTION.NUM_EX 10000
+
 cd /users/doloriel/work/Repo/M2A/data_cifar
-python -m cifar10c_vit_vida \
-     --cfg cfgs/cifar10/vida.yaml \
+python -m cifar10c_vit_mae\
+     --cfg cfgs/cifar10/cmae.yaml \
      --data_dir /scratch/project_465002264/datasets/cifar10c \
-     --checkpoint /users/doloriel/work/Repo/M2A/ckpt/vit_1_128_vida_cifar10c.t7 \
      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
