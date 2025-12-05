@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.jit
 
-
 class Tent(nn.Module):
     """Tent adapts a model by entropy minimization during testing.
 
@@ -38,7 +37,6 @@ class Tent(nn.Module):
         load_model_and_optimizer(self.model, self.optimizer,
                                  self.model_state, self.optimizer_state)
 
-
 @torch.jit.script
 def softmax_entropy(x: torch.Tensor) -> torch.Tensor:
     """Entropy of softmax distribution from logits."""
@@ -69,7 +67,6 @@ def forward_and_adapt(x, model, optimizer):
     optimizer.step()
     optimizer.zero_grad()
     return outputs
-
 
 def collect_params(model):
     """Collect the affine scale + shift parameters from batch norms.

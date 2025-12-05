@@ -25,7 +25,29 @@ source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
-# python -m mrsffiac_rem \
+# python -m mrsffiac \
+#       --cfg cfgs/vit/source.yaml \
+#       --data_dir /flash/project_465002264/datasets/mrsffia \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
+#       --seed 1 \
+#       CORRUPTION.NUM_EX 764
+
+# cd /users/doloriel/work/Repo/M2A/data_mrsffia
+# python -m mrsffiac_vit_tent \
+#       --cfg cfgs/vit/tent.yaml \
+#       --data_dir /flash/project_465002264/datasets/mrsffia \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
+#       CORRUPTION.NUM_EX 764
+
+# cd /users/doloriel/work/Repo/M2A/data_mrsffia
+# python -m mrsffiac_vit_cotta \
+#       --cfg cfgs/vit/cotta.yaml \
+#       --data_dir /flash/project_465002264/datasets/mrsffia \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
+#       CORRUPTION.NUM_EX 764
+
+# cd /users/doloriel/work/Repo/M2A/data_mrsffia
+# python -m mrsffiac_vit_rem \
 #       --cfg cfgs/vit/rem.yaml \
 #       --data_dir /flash/project_465002264/datasets/mrsffia \
 #       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
@@ -39,7 +61,7 @@ conda activate m2a
 #       CORRUPTION.NUM_EX 764
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
-# python -m mrsffiac_m2a \
+# python -m mrsffiac_vit_m2a \
 #       --cfg cfgs/vit/m2a.yaml \
 #       --data_dir /flash/project_465002264/datasets/mrsffia \
 #       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
@@ -56,32 +78,3 @@ conda activate m2a
 #       --mask_type binary \
 #       --disable_erl \
 #       CORRUPTION.NUM_EX 764
-
-# cd /users/doloriel/work/Repo/M2A/data_mrsffia
-# python -m mrsffiac \
-#       --cfg cfgs/vit/source.yaml \
-#       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
-#       --seed 1 \
-#       CORRUPTION.NUM_EX 764
-
-# cd /users/doloriel/work/Repo/M2A/data_mrsffia
-# python -m mrsffiac_tent \
-#       --cfg cfgs/vit/tent.yaml \
-#       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
-#       CORRUPTION.NUM_EX 764
-
-# cd /users/doloriel/work/Repo/M2A/data_mrsffia
-# python -m mrsffiac_cotta \
-#       --cfg cfgs/vit/cotta.yaml \
-#       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
-#       CORRUPTION.NUM_EX 764
-
-cd /users/doloriel/work/Repo/M2A/data_mrsffia
-python -m mrsffiac_vida \
-      --cfg cfgs/vit/vida.yaml \
-      --data_dir /flash/project_465002264/datasets/mrsffia \
-      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
-      CORRUPTION.NUM_EX 764

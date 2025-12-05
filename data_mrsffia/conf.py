@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Configuration file (powered by YACS)."""
+"""Configuration file (powered by YACS) for M2A: Stochastic Patch Erasing with
+Adaptive Residual Correction for Continual Test-Time Adaptation (CTTA), and related baselines."""
 
 import argparse
 import os
@@ -37,6 +38,10 @@ _C.MODEL.ADAPTATION = 'source'
 # By default tent is online, with updates persisting across batches.
 # To make adaptation episodic, and reset the model for each batch, choose True.
 _C.MODEL.EPISODIC = False
+ 
+# LayerNorm adaptation scope across transformer blocks (for ViT backbones)
+# Choices: 'default' (original behavior), 'q1','q2','q3','q4','all'
+_C.MODEL.LN_QUARTER = 'default'
 
 # ----------------------------- Corruption options -------------------------- #
 _C.CORRUPTION = CfgNode()
@@ -49,12 +54,10 @@ _C.CORRUPTION.TYPE = ['gaussian_noise', 'shot_noise', 'impulse_noise',
                       'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur',
                       'snow', 'frost', 'fog', 'brightness', 'contrast',
                       'elastic_transform', 'pixelate', 'jpeg_compression']
-_C.CORRUPTION.SEVERITY = [5, 4, 3, 2, 1]
+_C.CORRUPTION.SEVERITY = [5, 1]
 
-# Number of examples to evaluate 
-# The 5000 val images defined by Robustbench were actually used:
-# Please see https://github.com/RobustBench/robustbench/blob/7af0e34c6b383cd73ea7a1bbced358d7ce6ad22f/robustbench/data/imagenet_test_image_ids.txt
-_C.CORRUPTION.NUM_EX = 764
+# Number of examples to evaluate (10000 for all samples in CIFAR-10)
+_C.CORRUPTION.NUM_EX = 5600
 
 # ------------------------------- Batch norm options ------------------------ #
 _C.BN = CfgNode()
@@ -93,7 +96,7 @@ _C.OPTIM.NESTEROV = True
 _C.OPTIM.WD = 0.0
 
 # Masking ratio
-_C.OPTIM.KEEP = 518
+_C.OPTIM.KEEP = 288
 
 # COTTA
 _C.OPTIM.MT = 0.999
@@ -124,7 +127,7 @@ _C.RNG_SEED = 1
 _C.SAVE_DIR = "./output"
 
 # Data directory
-_C.DATA_DIR = "/mnt/work1/cotta/vida/imagenet/data/"
+_C.DATA_DIR = "./data"
 
 # Weight directory
 _C.CKPT_DIR = "./ckpt"
@@ -141,13 +144,11 @@ _C.mask_ratio = 0.5
 _C.use_hog = False
 _C.hog_ratio = 1
 
-
-# ViDA parameters
-_C.OPTIM.ViDALR = 5e-8
+# ViDA
 _C.TEST.vida_rank1 = 1
 _C.TEST.vida_rank2 = 128
 _C.OPTIM.MT_ViDA = 0.999
-_C.OPTIM.MT = 0.999
+_C.OPTIM.ViDALR=1e-4
 
 # REM parameters
 _C.OPTIM.M = 0.1
@@ -155,16 +156,47 @@ _C.OPTIM.N = 3
 _C.OPTIM.LAMB = 1.0
 _C.OPTIM.MARGIN = 0.0
 
-# M2A options
+# Phase distortion options
+_C.PHASE = CfgNode()
+_C.PHASE.LEVELS = [0.0, 0.25, 0.30]
+_C.PHASE.SEED = None
+_C.PHASE.ALPHA = 0.45
+_C.PHASE.CHANNEL_ORDER = [0, 1, 2]
+_C.PHASE.CHANNEL_STEPS = [0, 1, 2, 3]
+_C.PHASE.USE_MCL = True
+_C.PHASE.USE_ERL = True
+_C.PHASE.CONSISTENCY_MODE = 'mcl'
+_C.PHASE.CWAL_THRESHOLD = 0.7
+
+# (Removed phase-mix-then-mask config)
+
+# M2A: Stochastic Patch Erasing with Adaptive Residual Correction for
+# Continual Test-Time Adaptation (CTTA) options
 _C.M2A = CfgNode()
-_C.M2A.RANDOM_MASKING = 'spatial'   # choices: 'spatial','spectral'
-_C.M2A.NUM_SQUARES = 1              # used when RANDOM_MASKING='spatial'
-_C.M2A.MASK_TYPE = 'binary'         # choices: 'binary','gaussian','mean'
-_C.M2A.SPATIAL_TYPE = 'patch'       # choices: 'patch','pixel'
-_C.M2A.SPECTRAL_TYPE = 'all'        # choices: 'all','low','high'
+_C.M2A.RANDOM_MASKING = 'spatial'
+_C.M2A.NUM_SQUARES = 1
+_C.M2A.MASK_TYPE = 'binary'  # choices: 'binary', 'gaussian', 'mean'
+_C.M2A.SPATIAL_TYPE = 'patch'  # choices: 'patch','pixel'
+_C.M2A.SPECTRAL_TYPE = 'all'   # choices: 'all','low','high'
+_C.M2A.PLOT_LOSS = False
+_C.M2A.PLOT_LOSS_PATH = ""
+_C.M2A.PLOT_EMA_ALPHA = 0.98
+_C.M2A.MCL_TEMPERATURE = 1.0
+_C.M2A.MCL_TEMPERATURE_APPLY = 'both'  # choices: 'teacher', 'student', 'both'
+_C.M2A.MCL_DISTANCE = 'ce'             # choices: 'ce','kl','js','mse','mae'
+_C.M2A.ERL_ACTIVATION = 'relu'         # choices: 'relu','leaky_relu','softplus','gelu','sigmoid','identity'
+_C.M2A.ERL_LEAKY_RELU_SLOPE = 0.01
+_C.M2A.ERL_SOFTPLUS_BETA = 1.0
 _C.M2A.DISABLE_MCL = False
 _C.M2A.DISABLE_ERL = False
 _C.M2A.DISABLE_EML = False
+# MARN (Manifold-Aware Ranked Normalization)
+# (TALN options removed)
+_C.M2A.LOGM2A_ENABLE = 'none'           # choices: 'none','gamma','beta','gammabeta'
+_C.M2A.LOGM2A_LR_MULT = 1.0             # LR multiplier for Logm2a parameters
+_C.M2A.LOGM2A_REG = 0.0                 # regularizer strength for monotonic gamma/beta
+_C.M2A.LOGM2A_TEMP = 0.0                # if >0, apply as temperature to beta pre-softplus; masked views only
+
 
 # # Config destination (in SAVE_DIR)
 # _C.CFG_DEST = "cfg.yaml"
@@ -214,45 +246,100 @@ def load_cfg_fom_args(description="Config options."):
                         help="Config file location")
     parser.add_argument("opts", default=None, nargs=argparse.REMAINDER,
                         help="See conf.py for all options")
-    parser.add_argument("--data_dir", default="your_data_path", type=str)
+    parser.add_argument("--index", default=1, type=int)
+    parser.add_argument("--seed", default=None, type=int)
+    parser.add_argument("--size", default=384, type=int)
     parser.add_argument("--checkpoint", default=None, type=str)
-    parser.add_argument("--unc_thr", default=0.2, type=float)
-    parser.add_argument("--seed", default=None, type=int,
-                        help="Override RNG_SEED; if set, seeds numpy/torch/(cuda) and Python RNG")
-    parser.add_argument("--random_masking", type=str, default=None,
-                        choices=['spatial','spectral'],
-                        help="Random masking domain for M2A: spatial (image space) or spectral (FFT)")
-    parser.add_argument("--num_squares", type=int, default=None,
-                        help="Number of random equal-size squares per masking level when spatial masking")
-    parser.add_argument("--mask_type", type=str, default=None,
-                        choices=['binary','gaussian','mean'],
-                        help="Mask fill type: binary (zeros), gaussian blur, or per-image mean")
-    parser.add_argument("--spatial_type", type=str, default=None,
-                        choices=['patch','pixel'],
-                        help="When random_masking=spatial: 'patch' (squares) or 'pixel' (random pixels)")
-    parser.add_argument("--spectral_type", type=str, default=None,
-                        choices=['all','low','high'],
-                        help="When random_masking=spectral: 'all' (any bins), 'low' (top-left quadrant), 'high' (rest)")
-    parser.add_argument("--disable_mcl", action='store_true', help="Disable MCL loss term")
-    parser.add_argument("--disable_erl", action='store_true', help="Disable ERL loss term")
-    parser.add_argument("--disable_eml", action='store_true', help="Disable EML loss term")
-    # Optimization overrides
-    parser.add_argument("--m", type=float, default=None,
-                        help="REM/M2A masking increment m (e.g., 0.1). Overrides OPTIM.M if provided.")
-    parser.add_argument("--n", type=int, default=None,
-                        help="REM/M2A number of masking levels n. Overrides OPTIM.N if provided.")
-    parser.add_argument("--steps", type=int, default=None,
-                        help="Number of adaptation optimization steps per batch. Overrides OPTIM.STEPS if provided.")
-    parser.add_argument("--lr", type=float, default=None,
-                        help="Optimizer learning rate for test-time adaptation. Overrides OPTIM.LR if provided.")
-    parser.add_argument("--lamb", type=float, default=None,
-                        help="REM/M2A lambda weight for the ranking/consistency loss. Overrides OPTIM.LAMB if provided.")
-    
+    parser.add_argument("--unc_thr", default=0.05, type=float)
+    #parser.add_argument("--data_dir", type=str, default='./data')
+    parser.add_argument("--data_dir", type=str, default='/mnt/work1/cotta/continual-mae/cifar/data/')
+
+    # LayerNorm adaptation scope
+    parser.add_argument("--ln_quarter", type=str, default=None,
+                        choices=['default','q1','q2','q3','q4','all'],
+                        help="Which transformer block quarter's LayerNorms to adapt (ViT): default|q1|q2|q3|q4|all")
+
     parser.add_argument("--use_hog", action="store_true",
                     help="if use hog")
     parser.add_argument("--hog_ratio", type=float,
                     help="hog ratio")
+    parser.add_argument("--save_ckpt", action="store_true",
+                        help="If set, save a checkpoint of the adapted model at the end of evaluation")
+
+    # M2A (CTTA) optimization CLI options
+    parser.add_argument("--steps", type=int, default=None,
+                        help="Number of adaptation updates per batch (maps to OPTIM.STEPS)")
+    parser.add_argument("--m", type=float, default=None,
+                        help="Masking increment per level in [0,1] (maps to OPTIM.M)")
+    parser.add_argument("--n", type=int, default=None,
+                        help="Number of masking levels (maps to OPTIM.N)")
+    parser.add_argument("--lr", type=float, default=None,
+                        help="Learning rate for optimizer (maps to OPTIM.LR)")
+    # (Removed progressive/adaptive masking CLI args)
+    parser.add_argument("--lamb", type=float, default=None,
+                        help="Lambda for entropy-ordering loss (maps to OPTIM.LAMB)")
+    parser.add_argument("--margin", type=float, default=None,
+                        help="Margin multiplier in entropy-ordering loss (maps to OPTIM.MARGIN)")
+
+    # M2A-specific CLI options
+    # (Removed: --num_bins, --entropy_bins, --entropy_levels, --use_color_entropy, --entropy_weight_power)
+    parser.add_argument("--random_masking", type=str, default=None,
+                        choices=['spatial','spectral'],
+                        help="Masking domain for randomness: 'spatial' (random squares) or 'spectral' (random frequency bins)")
+    parser.add_argument("--num_squares", type=int, default=None,
+                        help="Number of equal-size squares to place per masking level (default from cfg)")
+    parser.add_argument("--mask_type", type=str, default=None, choices=['binary', 'gaussian', 'mean'],
+                        help="How to fill masked regions: 'binary' (zero), 'gaussian' (blurred), or 'mean' (per-image mean)")
+    parser.add_argument("--spatial_type", type=str, default=None, choices=['patch','pixel'],
+                        help="When random_masking=spatial: 'patch' (squares) or 'pixel' (random pixels)")
+    parser.add_argument("--spectral_type", type=str, default=None, choices=['all','low','high'],
+                        help="When random_masking=spectral: 'all' (any bins), 'low' (top-left quadrant), 'high' (rest)")
+    # (Removed M2A pruning CLI options)
+    # M2A plotting CLI options
+    parser.add_argument("--plot_loss", action="store_true",
+                        help="If set, save a PNG plot of EMA of MCL and ERL across steps")
+    parser.add_argument("--plot_loss_path", type=str, default=None,
+                        help="Output path for the loss plot PNG")
+    parser.add_argument("--plot_ema_alpha", type=float, default=None,
+                        help="EMA alpha for smoothing MCL/ERL curves (e.g., 0.98)")
+    # Disable specific losses
+    parser.add_argument("--disable_mcl", action="store_true",
+                        help="Disable the Mask Consistency Loss (MCL) term")
+    parser.add_argument("--disable_erl", action="store_true",
+                        help="Disable the Entropy Ranking Loss (ERL) term")
+    parser.add_argument("--disable_eml", action="store_true",
+                        help="Disable the Entropy Minimization Loss (EML) term")
+    # MCL temperature
+    parser.add_argument("--mcl_temperature", type=float, default=None,
+                        help="Temperature for MCL softmax/log_softmax (default from cfg)")
+    parser.add_argument("--mcl_temperature_apply", type=str, default=None, choices=['teacher','student','both'],
+                        help="Where to apply MCL temperature: teacher, student, or both")
+    parser.add_argument("--mcl_distance", type=str, default=None,
+                        choices=['ce','kl','js','mse','mae'],
+                        help="Distance metric for MCL: ce|kl|js|mse|mae (default: ce)")
+    # ERL activation options
+    parser.add_argument("--erl_activation", type=str, default=None,
+                        choices=['relu','leaky_relu','softplus','gelu','sigmoid','identity'],
+                        help="Activation function used in ERL margin term")
+    parser.add_argument("--erl_leaky_relu_slope", type=float, default=None,
+                        help="Negative slope for LeakyReLU when erl_activation=leaky_relu")
+    parser.add_argument("--erl_softplus_beta", type=float, default=None,
+                        help="Beta parameter for Softplus when erl_activation=softplus")
+    # Logm2a CLI options
+    parser.add_argument("--logm2a_enable", type=str, default=None,
+                        choices=['none','gamma','beta','gammabeta'],
+                        help="Enable Logm2a on logits with mode: none|gamma|beta|gammabeta")
+    parser.add_argument("--logm2a_lr_mult", type=float, default=None,
+                        help="Learning rate multiplier for Logm2a parameters (default from cfg)")
+    parser.add_argument("--logm2a_reg", type=float, default=None,
+                        help="Monotonicity regularizer strength for gamma/beta across masking levels")
+    parser.add_argument("--logm2a_temp", type=float, default=None,
+                        help="If > 0, apply as temperature to beta pre-softplus; only when mask ratio > 0")
+    # (Removed: logm2a_type2/logm2a_type3 and ablation flags)
     
+    # (TALN CLI options removed)
+    # (Removed Phase-mix-then-mask CLI arg)
+
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
@@ -260,79 +347,88 @@ def load_cfg_fom_args(description="Config options."):
 
     merge_from_file(args.cfg_file)
     cfg.merge_from_list(args.opts)
-
+    
+    cfg.size = args.size
     cfg.DATA_DIR = args.data_dir
     cfg.TEST.ckpt = args.checkpoint
+    # Map CLI seed to config if provided; otherwise keep YAML/default
+    if args.seed is not None:
+        cfg.RNG_SEED = int(args.seed)
+
+    # Model LayerNorm selection from CLI
+    if args.ln_quarter is not None:
+        cfg.MODEL.LN_QUARTER = args.ln_quarter.lower()
+
+    # Populate OPTIM from CLI if provided
+    if args.steps is not None:
+        cfg.OPTIM.STEPS = args.steps
+    if args.m is not None:
+        cfg.OPTIM.M = args.m
+    if args.n is not None:
+        cfg.OPTIM.N = args.n
+    if args.lr is not None:
+        cfg.OPTIM.LR = args.lr
+    # (Removed progressive/adaptive OPTIM overrides from CLI)
+    if args.lamb is not None:
+        cfg.OPTIM.LAMB = args.lamb
+    if args.margin is not None:
+        cfg.OPTIM.MARGIN = args.margin
 
     cfg.use_hog = args.use_hog
     cfg.hog_ratio = args.hog_ratio
 
-    if args.seed is not None:
-        cfg.RNG_SEED = int(args.seed)
-    # Map optimization CLI args
-    if args.m is not None:
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
-        cfg.OPTIM.M = float(args.m)
-    if args.n is not None:
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
-        cfg.OPTIM.N = int(args.n)
-    if args.steps is not None:
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
-        cfg.OPTIM.STEPS = int(args.steps)
-    if args.lr is not None:
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
-        cfg.OPTIM.LR = float(args.lr)
-    if args.lamb is not None:
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
-        cfg.OPTIM.LAMB = float(args.lamb)
-    # Map M2A CLI args
+    # Populate M2A config from CLI if provided
+    # (Removed: num_bins/entropy_bins/entropy_levels/use_color_entropy/entropy_weight_power)
     if args.random_masking is not None:
         cfg.M2A.RANDOM_MASKING = args.random_masking.lower()
     if args.num_squares is not None:
-        try:
-            cfg.M2A.NUM_SQUARES = max(1, int(args.num_squares))
-        except Exception:
-            pass
+        cfg.M2A.NUM_SQUARES = max(1, int(args.num_squares))
     if args.mask_type is not None:
-        cfg.M2A.MASK_TYPE = args.mask_type.lower()
-    if getattr(args, 'spatial_type', None) is not None:
+        cfg.M2A.MASK_TYPE = str(args.mask_type).lower()
+    if args.spatial_type is not None:
         cfg.M2A.SPATIAL_TYPE = args.spatial_type.lower()
-    if getattr(args, 'spectral_type', None) is not None:
+    if args.spectral_type is not None:
         cfg.M2A.SPECTRAL_TYPE = args.spectral_type.lower()
-    # Loss toggles
-    if getattr(args, 'disable_mcl', False):
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
+    # Plotting options
+    if args.plot_loss:
+        cfg.M2A.PLOT_LOSS = True
+    if args.plot_loss_path is not None:
+        cfg.M2A.PLOT_LOSS_PATH = args.plot_loss_path
+    if args.plot_ema_alpha is not None:
+        cfg.M2A.PLOT_EMA_ALPHA = args.plot_ema_alpha
+    # Disable flags
+    if args.disable_mcl:
         cfg.M2A.DISABLE_MCL = True
-    if getattr(args, 'disable_erl', False):
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
+    if args.disable_erl:
         cfg.M2A.DISABLE_ERL = True
-    if getattr(args, 'disable_eml', False):
-        try:
-            cfg.defrost()
-        except Exception:
-            pass
+    if args.disable_eml:
         cfg.M2A.DISABLE_EML = True
+    # MCL temperature
+    if args.mcl_temperature is not None:
+        cfg.M2A.MCL_TEMPERATURE = args.mcl_temperature
+    if args.mcl_temperature_apply is not None:
+        cfg.M2A.MCL_TEMPERATURE_APPLY = args.mcl_temperature_apply.lower()
+    if args.mcl_distance is not None:
+        cfg.M2A.MCL_DISTANCE = args.mcl_distance.lower()
+    # ERL activation
+    if args.erl_activation is not None:
+        cfg.M2A.ERL_ACTIVATION = args.erl_activation.lower()
+    if args.erl_leaky_relu_slope is not None:
+        cfg.M2A.ERL_LEAKY_RELU_SLOPE = args.erl_leaky_relu_slope
+    if args.erl_softplus_beta is not None:
+        cfg.M2A.ERL_SOFTPLUS_BETA = args.erl_softplus_beta
+    # (TALN options removed)
+    # Logm2a options
+    if args.logm2a_enable is not None:
+        cfg.M2A.LOGM2A_ENABLE = args.logm2a_enable.lower()
+    if args.logm2a_lr_mult is not None:
+        cfg.M2A.LOGM2A_LR_MULT = float(args.logm2a_lr_mult)
+    if args.logm2a_reg is not None:
+        cfg.M2A.LOGM2A_REG = float(args.logm2a_reg)
+    if args.logm2a_temp is not None:
+        cfg.M2A.LOGM2A_TEMP = float(args.logm2a_temp)
+    # (Removed: logm2a_type2/logm2a_type3 and ablation mappings)
+
 
     log_dest = os.path.basename(args.cfg_file)
     log_dest = log_dest.replace('.yaml', '_{}.txt'.format(current_time))
@@ -365,5 +461,6 @@ def load_cfg_fom_args(description="Config options."):
                torch.backends.cudnn.version()]
     logger.info(
         "PyTorch Version: torch={}, cuda={}, cudnn={}".format(*version))
+    logger.info("Using RNG seed: %d", cfg.RNG_SEED)
     logger.info(cfg)
     return args

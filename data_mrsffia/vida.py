@@ -6,15 +6,14 @@ import torch.jit
 
 import PIL
 import torchvision.transforms as transforms
-import cotta_transforms as my_transforms
+import my_transforms as my_transforms
 from inject_vida import inject_trainable_vida
 from time import time
 import logging
-import os
 
 
 def get_tta_transforms(gaussian_std: float=0.005, soft=False, clip_inputs=False):
-    img_shape = (224, 224, 3)
+    img_shape = (384, 384, 3)
     n_pixels = img_shape[0]
 
     clip_min, clip_max = 0.0, 1.0
@@ -65,12 +64,12 @@ class ViDA(nn.Module):
 
     Once tented, a model adapts itself by updating on every forward.
     """
-    def __init__(self, model, optimizer, steps=1, episodic=False, ema=0.99, ema_vida = 0.99, rst_m=0.1, unc_thr = 0.2):
+    def __init__(self, model, optimizer, steps=1, episodic=False, ema=0.99, ema_vida = 0.99, rst_m=0.1, anchor_thr=0.9, unc_thr = 0.2):
         super().__init__()
         self.model = model
         self.optimizer = optimizer
         self.steps = steps
-        assert steps > 0, "vida requires >= 1 step(s) to forward and update"
+        assert steps > 0, "ViDA requires >= 1 step(s) to forward and update"
         self.episodic = episodic
         
         self.model_state, self.optimizer_state, self.model_ema, self.model_anchor = \
@@ -95,10 +94,9 @@ class ViDA(nn.Module):
             raise Exception("cannot reset without saved model/optimizer state")
         load_model_and_optimizer(self.model, self.optimizer,
                                  self.model_state, self.optimizer_state)
-        # use this line if you want to reset the teacher model as well. Maybe you also 
-        # want to del self.model_ema first to save gpu memory.
+        # Use this line to also restore the teacher model                         
         self.model_state, self.optimizer_state, self.model_ema, self.model_anchor = \
-            copy_model_and_optimizer(self.model, self.optimizer)                         
+            copy_model_and_optimizer(self.model, self.optimizer)
 
     def set_scale(self, update_model, high, low):
         for name, module in update_model.named_modules():
@@ -110,71 +108,55 @@ class ViDA(nn.Module):
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x, model, optimizer):
         self.model_ema.eval()
-
-        # Helper: map ViT token-wise logits (B, N_tokens, C) to CLS logits (B, C)
-        def _cls_logits(logits: torch.Tensor) -> torch.Tensor:
-            if logits.ndim == 3:
-                if logits.shape[1] > 1:
-                    # assume first token is CLS
-                    return logits[:, 0, :]
-                else:
-                    return logits.squeeze(1)
-            return logits
-
-        # Teacher Prediction for uncertainty (augmentation-averaged)
-        N = 10
+        # Teacher Prediction
+        # anchor_prob = torch.nn.functional.softmax(self.model_anchor(x), dim=1).max(1)[0]
+        # Augmentation-averaged Prediction
+        N = 10 
         outputs_uncs = []
         for i in range(N):
-            outputs_ = self.model_ema(self.transform(x))
-            outputs_ = _cls_logits(outputs_).detach()
+            outputs_  = self.model_ema(self.transform(x)).detach()
             outputs_uncs.append(outputs_)
-        outputs_unc = torch.stack(outputs_uncs)  # (N, B, C)
+        outputs_unc = torch.stack(outputs_uncs)
         variance = torch.var(outputs_unc, dim=0)
         uncertainty = torch.mean(variance) * 0.1
-        # print(uncertainty)
-        if uncertainty >= self.thr:
-            lambda_high = 1 + uncertainty
-            lambda_low = 1 - uncertainty
+        if uncertainty>= self.thr:
+            lambda_high = 1+uncertainty
+            lambda_low = 1-uncertainty
         else:
-            lambda_low = 1 + uncertainty
-            lambda_high = 1 - uncertainty
-        self.set_scale(update_model=model, high=lambda_high, low=lambda_low)
-        self.set_scale(update_model=self.model_ema, high=lambda_high, low=lambda_low)
-
-        # Teacher & student logits for loss
+            lambda_low = 1+uncertainty
+            lambda_high = 1-uncertainty
+        self.set_scale(update_model = model, high = lambda_high, low = lambda_low)
+        self.set_scale(update_model = self.model_ema, high = lambda_high, low = lambda_low)
         standard_ema = self.model_ema(x)
         outputs = self.model(x)
-        standard_ema = _cls_logits(standard_ema)
-        outputs = _cls_logits(outputs)
-
         # Student update
-        loss = softmax_entropy(outputs, standard_ema.detach()).mean()
+        loss = (softmax_entropy(outputs, standard_ema.detach())).mean(0) 
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         # Teacher update
-        self.model_ema = update_ema_variables(
-            ema_model=self.model_ema,
-            model=self.model,
-            alpha_teacher=self.alpha_teacher,
-            alpha_vida=self.alpha_vida,
-        )
-        # Stochastic restore (disabled by default in this implementation)
-        # if True:
-        #     for nm, m in self.model.named_modules():
-        #         for npp, p in m.named_parameters():
-        #             if npp in ['weight', 'bias'] and p.requires_grad:
-        #                 mask = (torch.rand(p.shape, device=p.device) < 0.001).float()
-        #                 full_name = f"{nm}.{npp}" if nm else npp
-        #                 with torch.no_grad():
-        #                     p.data = self.model_state[full_name] * mask + p * (1. - mask)
+        self.model_ema = update_ema_variables(ema_model = self.model_ema, model = self.model, alpha_teacher= self.alpha_teacher, alpha_vida = self.alpha_vida)
+        # Stochastic restore
+        if True:
+            for npp, p in model.named_parameters():
+                if p.requires_grad:
+                    mask = (torch.rand(p.shape)<self.rst).float().cuda() 
+                    with torch.no_grad():
+                        p.data = self.model_state[npp] * mask + p * (1.-mask)
+
+            # for nm, m  in self.model.named_modules():
+            #     for npp, p in m.named_parameters():
+            #         if npp in ['weight', 'bias'] and p.requires_grad:
+            #             mask = (torch.rand(p.shape)<self.rst).float().cuda() 
+            #             with torch.no_grad():
+            #                 p.data = self.model_state[f"{nm}.{npp}"] * mask + p * (1.-mask)
         return standard_ema
 
 
 @torch.jit.script
 def softmax_entropy(x, x_ema):# -> torch.Tensor:
     """Entropy of softmax distribution from logits."""
-    return -0.5*(x_ema.softmax(1) * x.log_softmax(1)).sum(1)-0.5*(x.softmax(1) * x_ema.log_softmax(1)).sum(1)
+    return -(x_ema.softmax(1) * x.log_softmax(1)).sum(1)
 
 def collect_params(model):
     """Collect all trainable parameters.
@@ -213,15 +195,15 @@ def load_model_and_optimizer(model, optimizer, model_state, optimizer_state):
 
 def configure_model(model, cfg):
     """Configure model for use with tent."""
-    # train mode, because tent optimizes the model to minimize entropy
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.cpu()
     vida_params, vida_names = inject_trainable_vida(model = model, target_replace_module = ["CrossAttention", "Attention"], \
             r = cfg.TEST.vida_rank1, r2 = cfg.TEST.vida_rank2)
-    # if cfg.TEST.ckpt!=None:
-    #     model = torch.nn.DataParallel(model) # make parallel
-    #     checkpoint = torch.load(cfg.TEST.ckpt, map_location="cpu")
-    #     model.load_state_dict(checkpoint, strict=True)
+    if cfg.TEST.ckpt!=None:
+        model = torch.nn.DataParallel(model)
+        checkpoint = torch.load(cfg.TEST.ckpt)
+        model.load_state_dict(checkpoint['model'], strict=True)
+
     # if cfg.TEST.ckpt!=None:
     #     checkpoint = torch.load(cfg.TEST.ckpt)
     #     model.load_state_dict(checkpoint, strict=True)

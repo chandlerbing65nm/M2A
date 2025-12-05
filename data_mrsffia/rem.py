@@ -1,26 +1,29 @@
 from copy import deepcopy
 
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.jit
-import torchvision
+import warnings
+import cv2
 
-import numpy as np
+
 import PIL
 from time import time
 import logging
+import operators
+import sys
 import math
 
-import matplotlib.pyplot as plt
 
 class REM(nn.Module):
-    def __init__(self, model, optimizer, len_num_keep=0, steps=1, episodic=False, m=0.1, n=3, lamb=1.0, margin=0.0,
-                 disable_mcl: bool = False, disable_erl: bool = False, disable_eml: bool = False):
+    def __init__(self, model, optimizer, steps=1, episodic=False, m=0.1, n=3, lamb=1.0, margin=0.0):
         super().__init__()
         self.model = model
         self.optimizer = optimizer
         self.steps = steps
+        assert steps > 0, "Continual_MAE requires >= 1 step(s) to forward and update"
         self.episodic = episodic
         
         self.model_state, self.optimizer_state, _, _ = \
@@ -30,13 +33,17 @@ class REM(nn.Module):
         self.n = n
         self.mn = [i * self.m for i in range(self.n)]
         self.lamb = lamb
-        self.margin = margin * math.log(1000)
+        self.margin = margin
 
         self.entropy = Entropy()
-        self.disable_mcl = bool(disable_mcl)
-        self.disable_erl = bool(disable_erl)
-        self.disable_eml = bool(disable_eml)
-        self.tokens = 196
+        self.tokens = 576
+        self.last_mcl = 0.0
+        self.last_erl = 0.0
+        self.last_eml = 0.0
+        self.mcl_sum = 0.0
+        self.erl_sum = 0.0
+        self.eml_sum = 0.0
+        self.loss_count = 0.0
         
     def forward(self, x):
         if self.episodic:
@@ -51,10 +58,21 @@ class REM(nn.Module):
             raise Exception("cannot reset without saved model/optimizer state")
         load_model_and_optimizer(self.model, self.optimizer,
                                  self.model_state, self.optimizer_state)
+        # Use this line to also restore the teacher model                         
+        # self.model_state, self.optimizer_state, _, _ = \
+        #     copy_model_and_optimizer(self.model, self.optimizer)
+
+    def reset_loss_stats(self):
+        self.mcl_sum = 0.0
+        self.erl_sum = 0.0
+        self.eml_sum = 0.0
+        self.loss_count = 0.0
+
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
-    def forward_and_adapt(self, x, optimizer):   
-        outputs, attn = self.model(x, return_attn=True)
+    def forward_and_adapt(self, x, optimizer):
+        outputs, attn = self.model(x, return_attn=True) # [20,577,10], [20, 12, 577, 577]
+        B = x.shape[0]
         attn_score = attn.mean(dim=1)[:, 0, 1:]
         len_keeps = []
         outputs_list = []
@@ -62,25 +80,27 @@ class REM(nn.Module):
         #######################################################
         ################  M_N = [0, 0.1, 0.2]  ################
         #######################################################
-        # len_keep_90 = torch.topk(attn.mean(dim=1)[:, 0, 1:], int(196*0.9), largest=False).indices
-        # len_keep_80 = torch.topk(attn.mean(dim=1)[:, 0, 1:], int(196*0.8), largest=False).indices
-
+        # sim, len_keep = torch.topk(attn.mean(dim=1)[:, 0, 1:], len_num_keep)
+        # len_keep_90 = torch.topk(attn.mean(dim=1)[:, 0, 1:], int(N*0.9), largest=False).indices
+        # len_keep_80 = torch.topk(attn.mean(dim=1)[:, 0, 1:], int(N*0.8), largest=False).indices
+        #
         # self.model.eval()
-        # outputs_fg90 = self.model(x, len_keep=len_keep_90, return_attn=False)
-        # outputs_fg80 = self.model(x, len_keep=len_keep_80, return_attn=False)
+        # outputs_fg90 = self.model(x, len_keep=len_keep_90, return_attn=False)[:, 0]
+        # outputs_fg80 = self.model(x, len_keep=len_keep_80, return_attn=False)[:, 0]
         # self.model.train()
-        
+        #
         # entropys = self.entropy(outputs)
         # entropys_fg90 = self.entropy(outputs_fg90)
         # entropys_fg80 = self.entropy(outputs_fg80)
-
-        # loss =  softmax_entropy(outputs_fg90,outputs.detach()).mean()
-        # loss += softmax_entropy(outputs_fg80,outputs_fg90.detach()).mean()
-        # loss += softmax_entropy(outputs_fg80,outputs.detach()).mean()
-
-        # lossn =  (F.relu(entropys-entropys_fg90.detach()+self.margin)).mean()
-        # lossn += (F.relu(entropys_fg90-entropys_fg80.detach()+self.margin)).mean()
-        # lossn += (F.relu(entropys-entropys_fg80.detach()+self.margin)).mean()
+        #
+        # loss = entropy(outputs_fg80,outputs_fg90.detach()).mean()
+        # loss += entropy(outputs_fg90,outputs.detach()).mean()
+        # loss += entropy(outputs_fg80,outputs.detach()).mean()
+        #
+        # margin = self.margin * math.log(outputs.shape[-1])
+        # lossn = ( F.relu(entropys_fg90-entropys_fg80.detach()+margin) ).mean()
+        # lossn += ( F.relu(entropys-entropys_fg90.detach()+margin) ).mean()
+        # lossn += ( F.relu(entropys-entropys_fg80.detach()+margin) ).mean()
         #######################################################
         
         self.model.eval()
@@ -96,48 +116,47 @@ class REM(nn.Module):
                 outputs_list.append(out)
         self.model.train()
 
-        total_loss_terms = []
-        if not self.disable_mcl:
-            mcl = 0.0
-            for i in range(1, len(self.mn)):
-                mcl = mcl + softmax_entropy(outputs_list[i], outputs_list[0].detach()).mean()
-                for j in range(1, i):
-                    mcl = mcl + softmax_entropy(outputs_list[i], outputs_list[j].detach()).mean()
-            if isinstance(mcl, torch.Tensor) and mcl.requires_grad:
-                total_loss_terms.append(mcl)
+        mcl_loss = None
+        for i in range(1, len(self.mn)):
+            term = softmax_entropy(outputs_list[i], outputs_list[0].detach()).mean()
+            mcl_loss = term if mcl_loss is None else (mcl_loss + term)
+            for j in range(1, i):
+                term_ij = softmax_entropy(outputs_list[i], outputs_list[j].detach()).mean()
+                mcl_loss = term_ij if mcl_loss is None else (mcl_loss + term_ij)
 
-        if not self.disable_erl:
-            entropys = [self.entropy(out) for out in outputs_list]
-            erl = 0.0
-            for i in range(len(self.mn)):
-                for j in range(i + 1, len(self.mn)):
-                    erl = erl + (F.relu(entropys[i] - entropys[j].detach() + self.margin)).mean()
-            if isinstance(erl, torch.Tensor) and erl.requires_grad:
-                total_loss_terms.append(self.lamb * erl)
-
-        if not self.disable_eml:
-            eml_terms = [self.entropy(out).mean() for out in outputs_list]
-            if len(eml_terms) > 0:
-                eml = sum(eml_terms) / float(len(eml_terms))
-                if isinstance(eml, torch.Tensor) and eml.requires_grad:
-                    total_loss_terms.append(eml)
-
-        if len(total_loss_terms) > 0:
-            loss = total_loss_terms[0]
-            for lt in total_loss_terms[1:]:
-                loss = loss + lt
-            loss.backward()
+        entropys = [self.entropy(out) for out in outputs_list]
+        lossn = 0.0
+        margin = self.margin * math.log(outputs.shape[-1])
+        for i in range(len(self.mn)):
+            for j in range(i + 1, len(self.mn)):
+                lossn += (F.relu(entropys[i] - entropys[j].detach() + margin)).mean()
+        
+        loss = (mcl_loss if mcl_loss is not None else 0.0) + self.lamb * lossn
+        
+        loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-        
+        try:
+            mcl_val = float((mcl_loss if mcl_loss is not None else 0.0).detach().item()) if isinstance(mcl_loss, torch.Tensor) else float(mcl_loss if mcl_loss is not None else 0.0)
+        except Exception:
+            mcl_val = 0.0
+        try:
+            erl_val = float(lossn.detach().item()) if isinstance(lossn, torch.Tensor) else float(lossn)
+        except Exception:
+            erl_val = 0.0
+        batch_weight = float(B)
+        self.mcl_sum += mcl_val * batch_weight
+        self.erl_sum += erl_val * batch_weight
+        self.loss_count += batch_weight
+        self.last_mcl = mcl_val
+        self.last_erl = erl_val
+        self.last_eml = 0.0
         return outputs
-
 
 @torch.jit.script
 def softmax_entropy(x, x_ema):# -> torch.Tensor:
     """Entropy of softmax distribution from logits."""
     return -(x_ema.softmax(1) * x.log_softmax(1)).sum(1)
-
 
 class Entropy(nn.Module):
     def __init__(self):
@@ -145,8 +164,6 @@ class Entropy(nn.Module):
 
     def __call__(self, logits):
         return -(logits.softmax(1) * logits.log_softmax(1)).sum(1)
-
-
 
 def collect_params(model):
     """Collect all trainable parameters.
@@ -157,29 +174,12 @@ def collect_params(model):
     Note: other choices of parameterization are possible!
     """
     params = []
+    names = []
 
     for nm, m in model.named_modules():
-        # skip top layers for adaptation: layer4 for ResNets and blocks9-11 for Vit-Base
+        # if True:  # isinstance(m, nn.BatchNorm2d): collect all
         if 'layer4' in nm:
             continue
-        # if 'blocks.0' in nm:
-        #     continue
-        # if 'blocks.1' in nm:
-        #     continue
-        # if 'blocks.2' in nm:
-        #     continue
-        # if 'blocks.3' in nm:
-        #     continue
-        # if 'blocks.4' in nm:
-        #     continue
-        # if 'blocks.5' in nm:
-        #     continue
-        # if 'blocks.6' in nm:
-        #     continue
-        # if 'blocks.7' in nm:
-        #     continue
-        # if 'blocks.8' in nm:
-        #     continue
         if 'blocks.9' in nm:
             continue
         if 'blocks.10' in nm:
@@ -190,13 +190,13 @@ def collect_params(model):
             continue
         if nm in ['norm']:
             continue
-        if 'blocks.' in nm and isinstance(m, (nn.LayerNorm,)):
-           for np, p in m.named_parameters():
-               if np in ['weight', 'bias'] and p.requires_grad:
-                   params.append(p)
-                #    print(nm, np)
-
-    return params
+            
+        if isinstance(m, nn.LayerNorm):
+            for np, p in m.named_parameters():
+                if np in ['weight', 'bias'] and p.requires_grad:
+                    params.append(p)
+                    names.append(f"{nm}.{np}")
+    return params, names
 
 
 def copy_model_and_optimizer(model, optimizer):
@@ -204,10 +204,10 @@ def copy_model_and_optimizer(model, optimizer):
     model_state = deepcopy(model.state_dict())
     model_anchor = deepcopy(model)
     optimizer_state = deepcopy(optimizer.state_dict())
-    ema_model = deepcopy(model)
-    for param in ema_model.parameters():
+    model_temp = deepcopy(model)
+    for param in model_temp.parameters():
         param.detach_()
-    return model_state, optimizer_state, ema_model, model_anchor
+    return model_state, optimizer_state, model_temp, model_anchor
 
 
 def load_model_and_optimizer(model, optimizer, model_state, optimizer_state):
@@ -225,10 +225,9 @@ def configure_model(model):
     # enable all trainable
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
-        # if isinstance(m, nn.LayerNorm):
+        #if isinstance(m, nn.LayerNorm):
             m.requires_grad_(True)
             # force use of batch stats in train and eval modes
-            #m.track_running_stats = True
             m.track_running_stats = False
             m.running_mean = None
             m.running_var = None

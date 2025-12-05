@@ -53,14 +53,13 @@ class CustomDatasetFolder(VisionDataset):
         targets (list): The class_index value for each image in the dataset
     """
 
-    def __init__(self, root, loader, extensions=None, transform=None, target_transform=None, is_valid_file=None,
-                 path_imgs: str = 'robustbench/data/mrsffia_test_image_ids.txt',
-                 cls_dict: str = 'robustbench/data/mrsffia_class_to_id_map.json'):
+    def __init__(self, root, loader, extensions=None, transform=None, target_transform=None, is_valid_file=None):
         super(CustomDatasetFolder, self).__init__(root)
         self.transform = transform
         self.target_transform = target_transform
         classes, class_to_idx = self._find_classes(self.root)
-        samples = make_custom_dataset(self.root, path_imgs, cls_dict)
+        samples = make_custom_dataset(self.root, 'robustbench/data/imagenet_test_image_ids.txt',
+                                      'robustbench/data/imagenet_class_to_id_map.json')
         if len(samples) == 0:
             raise (RuntimeError("Found 0 files in subfolders of: " + self.root + "\n"
                                 "Supported extensions are: " + ",".join(extensions)))
@@ -162,16 +161,11 @@ class CustomImageFolder(CustomDatasetFolder):
     """
 
     def __init__(self, root, transform=None, target_transform=None,
-                 loader=default_loader, is_valid_file=None,
-                 path_imgs: str = 'robustbench/data/mrsffia_test_image_ids.txt',
-                 cls_dict: str = 'robustbench/data/mrsffia_class_to_id_map.json'):
-        super(CustomImageFolder, self).__init__(
-            root, loader, IMG_EXTENSIONS if is_valid_file is None else None,
-            transform=transform,
-            target_transform=target_transform,
-            is_valid_file=is_valid_file,
-            path_imgs=path_imgs,
-            cls_dict=cls_dict)
+                 loader=default_loader, is_valid_file=None):
+        super(CustomImageFolder, self).__init__(root, loader, IMG_EXTENSIONS if is_valid_file is None else None,
+                                                transform=transform,
+                                                target_transform=target_transform,
+                                                is_valid_file=is_valid_file)
                                           
         self.imgs = self.samples
         

@@ -4,6 +4,8 @@ from typing import Any, Dict, Dict as OrderedDictType
 from robustbench.model_zoo.cifar10 import cifar_10_models
 from robustbench.model_zoo.cifar100 import cifar_100_models
 from robustbench.model_zoo.imagenet import imagenet_models
+from robustbench.model_zoo.mrsffia import mrsffia_models
+
 from robustbench.model_zoo.enums import BenchmarkDataset, ThreatModel
 
 ModelsDict = OrderedDictType[str, Dict[str, Any]]
@@ -14,5 +16,5 @@ model_dicts: BenchmarkDict = OrderedDict([
     (BenchmarkDataset.cifar_10, cifar_10_models),
     (BenchmarkDataset.cifar_100, cifar_100_models),
     (BenchmarkDataset.imagenet, imagenet_models),
-    (BenchmarkDataset.mrsffia, imagenet_models),
+    (BenchmarkDataset.mrsffia, mrsffia_models)
 ])

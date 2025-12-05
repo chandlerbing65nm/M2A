@@ -3,7 +3,8 @@ from collections import OrderedDict
 import torch
 import torch.nn.functional as F
 from torch import nn
-
+import timm
+from timm.models.vision_transformer import vit_base_patch16_384 as timm_vit_base_patch16_384
 from robustbench.model_zoo.architectures.dm_wide_resnet import CIFAR10_MEAN, CIFAR10_STD, \
     DMWideResNet, Swish, DMPreActResNet
 from robustbench.model_zoo.architectures.resnet import Bottleneck, BottleneckChen2020AdversarialNet, \
@@ -14,6 +15,15 @@ from robustbench.model_zoo.architectures.resnext import CifarResNeXt, \
 from robustbench.model_zoo.architectures.wide_resnet import WideResNet
 from robustbench.model_zoo.enums import ThreatModel
 
+import torch.nn as nn
+from .rem_vit import create_model_rem
+from .vit import create_model
+from .mae_vit import create_model_mae
+
+
+def modify_head(model):
+    model.head = nn.Linear(model.head.in_features, 10)
+    return model
 
 class Hendrycks2020AugMixResNeXtNet(CifarResNeXt):
     def __init__(self, depth=29, num_classes=10, cardinality=4, base_width=32):
@@ -682,7 +692,23 @@ l2 = OrderedDict([
     ('Standard', {
         'model': lambda: WideResNet(depth=28, widen_factor=10),
         'gdrive_id': '1t98aEuzeTL8P7Kpd5DIrCoCL21BNZUhC',
-    })
+    }),
+    ('Standard_VITB', {
+    'model': lambda: modify_head(create_model("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_REM', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_M2A', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_MAE', {
+    'model': lambda: modify_head(create_model_mae("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
 ])
 
 
@@ -736,7 +762,23 @@ common_corruptions = OrderedDict([
     ('Standard', {
         'model': lambda: WideResNet(depth=28, widen_factor=10),
         'gdrive_id': '1t98aEuzeTL8P7Kpd5DIrCoCL21BNZUhC',
-    })
+    }),
+    ('Standard_VITB', {
+    'model': lambda: modify_head(create_model("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_REM', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_M2A', {
+    'model': lambda: modify_head(create_model_rem("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
+    ('Standard_VITB_MAE', {
+    'model': lambda: modify_head(create_model_mae("vit_base_patch16_384", pretrained=False)),
+    'gdrive_id': '',
+    }),
 ])
 
 cifar_10_models = OrderedDict([(ThreatModel.Linf, linf), (ThreatModel.L2, l2),

@@ -286,7 +286,6 @@ class VisionTransformer(nn.Module):
 
         # Classifier head(s)
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
-        #self.head_vc = nn.Linear(self.num_features, 1)
         self.head_dist = None
         if distilled:
             self.head_dist = nn.Linear(self.embed_dim, self.num_classes) if num_classes > 0 else nn.Identity()
@@ -337,17 +336,22 @@ class VisionTransformer(nn.Module):
             x = torch.cat((cls_token, x), dim=1)
         else:
             x = torch.cat((cls_token, self.dist_token.expand(x.shape[0], -1, -1), x), dim=1)
+        # Apply class-token feature polynomial if available
+        if hasattr(self, 'taln_cls_poly') and isinstance(self.taln_cls_poly, nn.Module):
+            x_cls = self.taln_cls_poly(x[:, 0, :])
+            x = torch.cat((x_cls.unsqueeze(1), x[:, 1:, :]), dim=1)
         x = self.pos_drop(x + self.pos_embed)
-        # x = self.blocks(x)
         for i, blk in enumerate(self.blocks):
             if i < len(self.blocks) - 1:
                 x = blk(x)
             else:
-                # return attention of the last block
                 x, attn = blk(x, return_attn=True)
 
         x = self.norm(x)
-        return x, attn
+        if return_attn:
+            return x[:,0], attn
+        else:
+            return x[:,0]
 
     def forward(self, x, return_attn=False) -> torch.Tensor:
         if return_attn:
@@ -355,8 +359,9 @@ class VisionTransformer(nn.Module):
             x = self.forward_head(x)
             return x, attn
         else:
-            x, _ = self.forward_features(x, return_attn=False)
-            x = self.head(x)
+            x = self.forward_features(x, return_attn=False)
+            x = self.forward_head(x)
+            #x = self.head(x)
             return x
 
 

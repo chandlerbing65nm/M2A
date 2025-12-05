@@ -3,6 +3,7 @@ import os
 import logging
 import math
 
+import torch.nn as nn
 import torch.nn.functional as F
 from .vision_transformer import VisionTransformer
 # from timm.models.vision_transformer import VisionTransformer
@@ -48,11 +49,14 @@ def _cfg(url='', **kwargs):
         **kwargs
     }
 
-default_cfgs = {'vit_base_patch16_224': _cfg(
+
+default_cfgs = {'vit_base_patch16_384': _cfg(
     url='https://storage.googleapis.com/vit_models/augreg/'
-        'B_16-i21k-300ep-lr_0.001-aug_medium1-wd_0.1-do_0.0-sd_0.0--imagenet2012-steps_20k-lr_0.01-res_224.npz',
-    num_classes=4, input_size=(3, 224, 224), crop_pct=1.0)
+        'B_16-i21k-300ep-lr_0.001-aug_medium1-wd_0.1-do_0.0-sd_0.0--imagenet2012-steps_20k-lr_0.01-res_384.npz',
+    # 'B_16-i1k-300ep-lr_0.001-aug_strong2-wd_0.1-do_0.1-sd_0.1--imagenet2012-steps_20k-lr_0.01-res_384.npz', #copy from pytorch-image-models
+    input_size=(3, 384, 384), crop_pct=1.0)
 }
+
 
 def resize_pos_embed(posemb, posemb_new, num_tokens=1, gs_new=()):
     # Rescale the grid of position embeddings when loading from state_dict. Adapted from
@@ -135,27 +139,13 @@ def _create_vision_transformer(variant, pretrained=False, default_cfg=None, **kw
             **kwargs)
         return model
 
-def vit_tiny_patch16_224(pretrained=False, **kwargs):
-    """ ViT-Tiny (Vit-Ti/16)
-    """
-    model_kwargs = dict(patch_size=16, embed_dim=192, depth=12, num_heads=3, **kwargs)
-    model = _create_vision_transformer('vit_tiny_patch16_224', pretrained=pretrained, **model_kwargs)
-    return model
 
-def vit_base_patch16_224(pretrained=False, **kwargs):
+def vit_base_patch16_384(pretrained=False, **kwargs):
     """ ViT-Base model (ViT-B/16) from original paper (https://arxiv.org/abs/2010.11929).
     ImageNet-1k weights fine-tuned from in21k @ 384x384, source https://github.com/google-research/vision_transformer.
     """
     model_kwargs = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12, **kwargs)
-    model = _create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **model_kwargs)
-    return model
-
-def vit_large_patch16_224(pretrained=False, **kwargs):
-    """ ViT-Large model (ViT-L/32) from original paper (https://arxiv.org/abs/2010.11929).
-    ImageNet-1k weights fine-tuned from in21k @ 224x224, source https://github.com/google-research/vision_transformer.
-    """
-    model_kwargs = dict(patch_size=16, embed_dim=1024, depth=24, num_heads=16, **kwargs)
-    model = _create_vision_transformer('vit_large_patch16_224', pretrained=pretrained, **model_kwargs)
+    model = _create_vision_transformer('vit_base_patch16_384', pretrained=pretrained, **model_kwargs)
     return model
 
 
@@ -210,13 +200,12 @@ def create_model(
         kwargs['external_default_cfg'] = hf_default_cfg  # FIXME revamp default_cfg interface someday
 
     with set_layer_config(scriptable=scriptable, exportable=exportable, no_jit=no_jit):
-        model = vit_base_patch16_224(pretrained=pretrained, **kwargs)
+        model = vit_base_patch16_384(pretrained=pretrained, **kwargs)
 
     if checkpoint_path:
         load_checkpoint(model, checkpoint_path)
 
     return model
-
 
 class vit(VisionTransformer):
     def __init__(self, **kwargs):
@@ -226,7 +215,7 @@ class vit(VisionTransformer):
         x = self.patch_embed(x)
         B, N, _ = x.shape
         device = x.device
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)
+        cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_token, x), dim=1)
         x = x + self.pos_embed
 
@@ -247,17 +236,17 @@ class vit(VisionTransformer):
 
         x = self.norm(x)
         if return_attn:
-            return x, attn
+            return x[:,0], attn
         else:
-            return x
+            return x[:,0]
 
     def forward(self, x, len_keep=None, return_attn=False):
         if return_attn is True:
-            feat, attn = self.forward_features(x, len_keep, True)
-            x = self.head(feat[:,0])
+            x, attn = self.forward_features(x, len_keep, True)
+            x = self.head(x)
             return x, attn
         else:
-            feat = self.forward_features(x, len_keep, False)
-            x = self.head(feat[:,0])
+            x = self.forward_features(x, len_keep, False)
+            x = self.head(x)
             return x
 

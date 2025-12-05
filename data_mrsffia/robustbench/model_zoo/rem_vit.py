@@ -3,6 +3,7 @@ import os
 import logging
 import math
 
+import torch.nn as nn
 import torch.nn.functional as F
 from .vision_transformer import VisionTransformer as VisionTransformer_REM
 from timm.models.vision_transformer import VisionTransformer
@@ -41,17 +42,19 @@ def safe_model_name(model_name, remove_source=True):
 def _cfg(url='', **kwargs):
     return {
         'url': url,
-        'num_classes': 4, 'input_size': (3, 224, 224), 'pool_size': None,
+        'num_classes': 1000, 'input_size': (3, 224, 224), 'pool_size': None,
         'crop_pct': .9, 'interpolation': 'bicubic', 'fixed_input_size': True,
         'mean': IMAGENET_INCEPTION_MEAN, 'std': IMAGENET_INCEPTION_STD,
         'first_conv': 'patch_embed.proj', 'classifier': 'head',
         **kwargs
     }
 
-default_cfgs = {'vit_base_patch16_224': _cfg(
+
+default_cfgs = {'vit_base_patch16_384': _cfg(
     url='https://storage.googleapis.com/vit_models/augreg/'
-        'B_16-i21k-300ep-lr_0.001-aug_medium1-wd_0.1-do_0.0-sd_0.0--imagenet2012-steps_20k-lr_0.01-res_224.npz',
-    num_classes=4, input_size=(3, 224, 224), crop_pct=1.0)
+        'B_16-i21k-300ep-lr_0.001-aug_medium1-wd_0.1-do_0.0-sd_0.0--imagenet2012-steps_20k-lr_0.01-res_384.npz',
+    # 'B_16-i1k-300ep-lr_0.001-aug_strong2-wd_0.1-do_0.1-sd_0.1--imagenet2012-steps_20k-lr_0.01-res_384.npz', #copy from pytorch-image-models
+    input_size=(3, 384, 384), crop_pct=1.0)
 }
 
 
@@ -129,6 +132,7 @@ def _create_vision_transformer(variant, pretrained=False, default_cfg=None, **kw
             model.load_pretrained(local_path)
         return model
     else:
+        # Delegate to timm for typical .pth checkpoints
         model = build_model_with_cfg(
             our_vit, variant, pretrained,
             default_cfg=default_cfg,
@@ -155,7 +159,7 @@ def _create_vision_transformer_rem(variant, pretrained=False, default_cfg=None, 
     is_npz = 'npz' in default_cfg.get('url', '')
     if is_npz:
         model = build_model_with_cfg(
-            vit_rem, variant, False,
+            rem_vit, variant, False,
             default_cfg=default_cfg,
             representation_size=repr_size,
             pretrained_filter_fn=checkpoint_filter_fn,
@@ -171,7 +175,7 @@ def _create_vision_transformer_rem(variant, pretrained=False, default_cfg=None, 
         return model
     else:
         model = build_model_with_cfg(
-            vit_rem, variant, pretrained,
+            rem_vit, variant, pretrained,
             default_cfg=default_cfg,
             representation_size=repr_size,
             pretrained_filter_fn=checkpoint_filter_fn,
@@ -187,20 +191,13 @@ def vit_base_patch16_384(pretrained=False, **kwargs):
     model = _create_vision_transformer('vit_base_patch16_384', pretrained=pretrained, **model_kwargs)
     return model
 
-def vit_base_patch16_224(pretrained=False, **kwargs):
-    """ ViT-Base model (ViT-B/16) from original paper (https://arxiv.org/abs/2010.11929).
-    ImageNet-1k weights fine-tuned from in21k @ 384x384, source https://github.com/google-research/vision_transformer.
-    """
-    model_kwargs = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12, **kwargs)
-    model = _create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **model_kwargs)
-    return model
 
-def vit_base_patch16_224_rem(pretrained=False, **kwargs):
+def vit_base_patch16_384_rem(pretrained=False, **kwargs):
     """ ViT-Base model (ViT-B/16) from original paper (https://arxiv.org/abs/2010.11929).
     ImageNet-1k weights fine-tuned from in21k @ 384x384, source https://github.com/google-research/vision_transformer.
     """
     model_kwargs = dict(patch_size=16, embed_dim=768, depth=12, num_heads=12, **kwargs)
-    model = _create_vision_transformer_rem('vit_base_patch16_224', pretrained=pretrained, **model_kwargs)
+    model = _create_vision_transformer_rem('vit_base_patch16_384', pretrained=pretrained, **model_kwargs)
     return model
 
 
@@ -255,7 +252,7 @@ def create_model_rem(
         kwargs['external_default_cfg'] = hf_default_cfg  # FIXME revamp default_cfg interface someday
 
     with set_layer_config(scriptable=scriptable, exportable=exportable, no_jit=no_jit):
-        model = vit_base_patch16_224_rem(pretrained=pretrained, **kwargs)
+        model = vit_base_patch16_384_rem(pretrained=pretrained, **kwargs)
 
     if checkpoint_path:
         load_checkpoint(model, checkpoint_path)
@@ -314,14 +311,71 @@ def create_model(
         kwargs['external_default_cfg'] = hf_default_cfg  # FIXME revamp default_cfg interface someday
 
     with set_layer_config(scriptable=scriptable, exportable=exportable, no_jit=no_jit):
-        model = vit_base_patch16_224(pretrained=pretrained, **kwargs)
+        model = vit_base_patch16_384(pretrained=pretrained, **kwargs)
 
     if checkpoint_path:
         load_checkpoint(model, checkpoint_path)
 
     return model
 
-class vit_rem(VisionTransformer_REM):
+
+class our_vit(VisionTransformer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def forward_features(self, x, mask_token=None, unmask=None, return_norm=False):
+        x = self.patch_embed(x)
+        B, N, _ = x.shape
+        device = x.device
+        # switch input tokens by mask_token
+        if mask_token is not None:
+            mask_tokens = mask_token.module.expand(B, N, -1).to(device)
+            unmask = unmask.unsqueeze(2).to(device)  # mask_chosed
+            x = x * (1 - unmask) + mask_tokens * unmask
+        cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        if self.dist_token is None:
+            x = torch.cat((cls_token, x), dim=1)
+        else:
+            x = torch.cat((cls_token, self.dist_token.expand(x.shape[0], -1, -1), x), dim=1)
+        x = self.pos_drop(x + self.pos_embed)
+
+        x = self.blocks(x)
+        x = self.norm(x)
+
+        x_norm = x
+        if self.dist_token is None and return_norm is False:
+            return self.pre_logits(x[:, 0])
+        elif self.dist_token is None and return_norm is not False:
+            return self.pre_logits(x[:, 0]), x_norm
+        else:
+            return x[:, 0], x[:, 1]
+
+    def forward(self, x, mask_token=None, unmask=None, return_norm=False):
+        if return_norm:
+            x, x_norm = self.forward_features(x, mask_token, unmask, return_norm)
+            if self.head_dist is not None:
+                x, x_dist = self.head(x[0]), self.head_dist(x[1])  # x must be a tuple
+                if self.training and not torch.jit.is_scripting():
+                    return x, x_dist
+                else:
+                    return (x + x_dist) / 2
+            else:
+                x = self.head(x)
+            return x, x_norm
+        else:
+            x = self.forward_features(x)
+            if self.head_dist is not None:
+                x, x_dist = self.head(x[0]), self.head_dist(x[1])  # x must be a tuple
+                if self.training and not torch.jit.is_scripting():
+                    return x, x_dist
+                else:
+                    return (x + x_dist) / 2
+            else:
+                x = self.head(x)
+            return x
+
+
+class rem_vit(VisionTransformer_REM):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -329,8 +383,12 @@ class vit_rem(VisionTransformer_REM):
         x = self.patch_embed(x)
         B, N, _ = x.shape
         device = x.device
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)
+        cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         x = torch.cat((cls_token, x), dim=1)
+        # Apply class-token feature polynomial if available
+        if hasattr(self, 'taln_cls_poly') and isinstance(self.taln_cls_poly, nn.Module):
+            x_cls = self.taln_cls_poly(x[:, 0, :])
+            x = torch.cat((x_cls.unsqueeze(1), x[:, 1:, :]), dim=1)
         x = x + self.pos_embed
 
         if len_keep is not None:
@@ -350,18 +408,17 @@ class vit_rem(VisionTransformer_REM):
 
         x = self.norm(x)
         if return_attn:
-            return x, attn
+            return x[:,0], attn
         else:
-            return x
+            return x[:,0]
 
     def forward(self, x, len_keep=None, return_attn=False):
         if return_attn is True:
-            feat, attn = self.forward_features(x, len_keep, True)
-            x = self.head(feat[:,0])
+            x, attn = self.forward_features(x, len_keep, True)
+            x = self.head(x)
             return x, attn
         else:
-            feat = self.forward_features(x, len_keep, False)
-            x = self.head(feat[:,0])
+            x = self.forward_features(x, len_keep, False)
+            x = self.head(x)
             return x
-
 

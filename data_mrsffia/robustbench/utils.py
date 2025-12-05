@@ -15,7 +15,6 @@ from torch import nn
 from robustbench.model_zoo import model_dicts as all_models
 from robustbench.model_zoo.enums import BenchmarkDataset, ThreatModel
 
-import logging
 
 ACC_FIELDS = {
     ThreatModel.corruptions: "corruptions_acc",
@@ -111,11 +110,22 @@ def load_model(model_name: str,
     model_path = model_dir_ / f'{model_name}.pt'
     models = all_models[dataset_][threat_model_]
 
+    # # Force native timm ViT for CIFAR-10 Standard_VITB to avoid custom REM ViT class
+    # if dataset_ == BenchmarkDataset.cifar_10 and model_name == 'Standard_VITB':
+    #     try:
+    #         from timm.models.vision_transformer import vit_base_patch16_384 as _vit_b16_384
+    #         from torch import nn as _nn
+    #         m = _vit_b16_384(pretrained=False)
+    #         if hasattr(m, 'head') and isinstance(m.head, _nn.Linear):
+    #             m.head = _nn.Linear(m.head.in_features, 10)
+    #         return m.eval()
+    #     except Exception:
+    #         pass
+
     if not isinstance(models[model_name]['gdrive_id'], list):
         model = models[model_name]['model']()
-        if dataset_ == BenchmarkDataset.mrsffia and 'Standard' in model_name:
-            return model.eval()
-        
+        # Early return in this fork to bypass gdrive downloads for local usage
+        return model.eval()
         if not os.path.exists(model_dir_):
             os.makedirs(model_dir_)
         if not os.path.isfile(model_path):
@@ -135,7 +145,7 @@ def load_model(model_name: str,
             state_dict = rm_substr_from_state_dict(checkpoint, 'module.')
             state_dict = rm_substr_from_state_dict(state_dict, 'model.')
 
-        if dataset_ == BenchmarkDataset.mrsffia:
+        if dataset_ == BenchmarkDataset.imagenet:
             # so far all models need input normalization, which is added as extra layer
             state_dict = add_substr_to_state_dict(state_dict, 'model.')
         
@@ -189,7 +199,7 @@ def _safe_load_state_dict(model: nn.Module, model_name: str,
     try:
         model.load_state_dict(state_dict, strict=True)
     except RuntimeError as e:
-        if (model_name in known_failing_models or dataset_ == BenchmarkDataset.mrsffia
+        if (model_name in known_failing_models or dataset_ == BenchmarkDataset.imagenet
             ) and any([msg in str(e) for msg in failure_messages]):
             model.load_state_dict(state_dict, strict=False)
         else:
@@ -197,13 +207,12 @@ def _safe_load_state_dict(model: nn.Module, model_name: str,
 
     return model
 
+
 def clean_accuracy(model: nn.Module,
                    x: torch.Tensor,
                    y: torch.Tensor,
                    batch_size: int = 100,
-                   device: torch.device = None,
-                   logger=None
-                   ):
+                   device: torch.device = None):
     if device is None:
         device = x.device
     acc = 0.
