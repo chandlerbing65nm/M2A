@@ -26,7 +26,7 @@ CORRUPTION:
     - pixelate
     - jpeg_compression
 OPTIM:
-  METHOD: Adam
+  METHOD: SGD
   STEPS: 1
   BETA: 0.9
   LR: 1e-4
