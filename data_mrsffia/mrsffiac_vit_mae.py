@@ -38,7 +38,7 @@ def evaluate(description):
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth")
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth")
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
     base_model.load_state_dict(checkpoint, strict=True)
     if cfg.TEST.ckpt is not None:

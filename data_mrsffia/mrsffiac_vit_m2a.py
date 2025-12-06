@@ -44,7 +44,7 @@ def evaluate(description):
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth", map_location='cpu')
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth", map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
     if isinstance(checkpoint, dict) and 'model' in checkpoint:
         base_model.load_state_dict(checkpoint['model'], strict=True)
@@ -418,7 +418,7 @@ def setup_optimizer(params):
 
 def setup_m2a(model):
     model = m2a.configure_model(model)
-    params, param_names = m2a.collect_params(model, ln_quarter=cfg.MODEL.LN_QUARTER)
+    params, param_names = m2a.collect_params(model)
     if cfg.OPTIM.METHOD == 'Adam':
         optimizer = optim.Adam(params,
                                lr=cfg.OPTIM.LR,

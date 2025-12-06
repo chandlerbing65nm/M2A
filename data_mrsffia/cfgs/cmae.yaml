@@ -1,17 +1,21 @@
 MODEL:
-  ADAPTATION: cotta
-  ARCH: Standard_VITB
+  ADAPTATION: Continual_MAE
+  ARCH: Standard_VITB_MAE   # VIT: Standard_VITB  CNN: Standard
 TEST:
-  BATCH_SIZE: 4
+  BATCH_SIZE: 10 #default 200  VIT 10  CNN: 200
 CORRUPTION:
   DATASET: mrsffia
   SEVERITY:
+    - 1
+    - 2
+    - 3
+    - 4
     - 5
   TYPE:
     - gaussian_noise
     - shot_noise
     - impulse_noise
-    - defocus_blur
+    - defocus_blur 
     - glass_blur
     - motion_blur
     - zoom_blur
@@ -24,11 +28,14 @@ CORRUPTION:
     - pixelate
     - jpeg_compression
 OPTIM:
-  METHOD: SGD
+  METHOD: Adam
   STEPS: 1
   BETA: 0.9
-  LR: 1e-4
+  LR: 1e-5
   WD: 0.
   MT: 0.999
   RST: 0.01
   AP: 0.92
+
+block_size: 16 
+mask_ratio: 0.5

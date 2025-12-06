@@ -24,33 +24,39 @@ export MIOPEN_FIND_MODE=1
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
-# cd /users/doloriel/work/Repo/M2A/data_mrsffia
-# python -m mrsffiac \
-#       --cfg cfgs/vit/source.yaml \
-#       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
-#       --seed 1 \
-#       CORRUPTION.NUM_EX 764
+cd /users/doloriel/work/Repo/M2A/data_mrsffia
+python -m mrsffiac_vit \
+      --cfg cfgs/source.yaml \
+      --data_dir /flash/project_465002264/datasets/mrsffia \
+      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth \
+      CORRUPTION.NUM_EX 764
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
 # python -m mrsffiac_vit_tent \
-#       --cfg cfgs/vit/tent.yaml \
+#       --cfg cfgs/tent.yaml \
 #       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth \
 #       CORRUPTION.NUM_EX 764
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
 # python -m mrsffiac_vit_cotta \
-#       --cfg cfgs/vit/cotta.yaml \
+#       --cfg cfgs/cotta.yaml \
 #       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth \
+#       CORRUPTION.NUM_EX 764
+
+# cd /users/doloriel/work/Repo/M2A/data_mrsffia
+# python -m mrsffiac_vit_mae \
+#       --cfg cfgs/cmae.yaml \
+#       --data_dir /flash/project_465002264/datasets/mrsffia \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth \
 #       CORRUPTION.NUM_EX 764
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
 # python -m mrsffiac_vit_rem \
-#       --cfg cfgs/vit/rem.yaml \
+#       --cfg cfgs/rem.yaml \
 #       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth \
 #       --seed 1 \
 #       --m 0.1 \
 #       --n 3 \
@@ -62,9 +68,9 @@ conda activate m2a
 
 # cd /users/doloriel/work/Repo/M2A/data_mrsffia
 # python -m mrsffiac_vit_m2a \
-#       --cfg cfgs/vit/m2a.yaml \
+#       --cfg cfgs/m2a.yaml \
 #       --data_dir /flash/project_465002264/datasets/mrsffia \
-#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth \
 #       --seed 1 \
 #       --m 0.1 \
 #       --n 3 \

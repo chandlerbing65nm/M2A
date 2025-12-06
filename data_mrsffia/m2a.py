@@ -100,94 +100,126 @@ def configure_model(model: nn.Module) -> nn.Module:
     return model
 
 
-def collect_params(model: nn.Module, ln_quarter: str = 'default'):
-    """Collect trainable parameters (LayerNorm weights/bias) with optional quarter selection.
+# def collect_params(model: nn.Module, ln_quarter: str = 'default'):
+#     """Collect trainable parameters (LayerNorm weights/bias) with optional quarter selection.
 
-    Quarter selection applies to ViT-style transformer blocks named like 'blocks.X'.
-    Options:
-      - 'default': original policy (skip LayerNorms in blocks 9,10,11 and any top-level 'norm')
-      - 'q1'|'q2'|'q3'|'q4': only LayerNorms inside the corresponding quarter of transformer blocks
-      - 'all': LayerNorms inside all transformer blocks
+#     Quarter selection applies to ViT-style transformer blocks named like 'blocks.X'.
+#     Options:
+#       - 'default': original policy (skip LayerNorms in blocks 9,10,11 and any top-level 'norm')
+#       - 'q1'|'q2'|'q3'|'q4': only LayerNorms inside the corresponding quarter of transformer blocks
+#       - 'all': LayerNorms inside all transformer blocks
 
-    For CNN backbones, the original exclusions (skip 'layer4', skip top-level 'norm') still apply.
+#     For CNN backbones, the original exclusions (skip 'layer4', skip top-level 'norm') still apply.
+#     """
+#     ln_quarter = str(ln_quarter).lower()
+#     params = []
+#     names = []
+
+#     # First pass: gather transformer block indices if present
+#     block_indices = set()
+#     for nm, _ in model.named_modules():
+#         if 'blocks.' in nm:
+#             try:
+#                 after = nm.split('blocks.')[1]
+#                 idx_str = after.split('.')[0]
+#                 if idx_str.isdigit():
+#                     block_indices.add(int(idx_str))
+#             except Exception:
+#                 pass
+
+#     sorted_blocks = sorted(block_indices)
+#     n_blocks = len(sorted_blocks)
+
+#     def quarter_index_ranges(n: int):
+#         # Returns list of (start_inclusive, end_inclusive) for 4 quarters dividing [0, n)
+#         # Use rounding to distribute remainder evenly.
+#         bounds = [int(round(i * n / 4.0)) for i in range(5)]  # 0, ~n/4, ~n/2, ~3n/4, n
+#         return [(bounds[i], bounds[i + 1] - 1) for i in range(4)]
+
+#     allowed_blocks = None  # None means use default policy
+#     if ln_quarter in ['q1', 'q2', 'q3', 'q4', 'all'] and n_blocks > 0:
+#         if ln_quarter == 'all':
+#             allowed_blocks = set(sorted_blocks)
+#         else:
+#             q_map = {'q1': 0, 'q2': 1, 'q3': 2, 'q4': 3}
+#             q_idx = q_map[ln_quarter]
+#             ranges = quarter_index_ranges(n_blocks)
+#             # Map back to actual block indices using their sorted order
+#             start_pos, end_pos = ranges[q_idx]
+#             start_pos = max(0, min(start_pos, n_blocks - 1))
+#             end_pos = max(start_pos, min(end_pos, n_blocks - 1))
+#             allowed_blocks = set(sorted_blocks[start_pos:end_pos + 1])
+
+#     # Second pass: collect LayerNorm parameters according to policy
+#     for nm, m in model.named_modules():
+#         # Exclusions common to both policies
+#         if 'layer4' in nm:
+#             continue
+#         if 'norm.' in nm:
+#             continue
+#         if nm in ['norm']:
+#             continue
+
+#         # Determine if this module is inside a specific transformer block
+#         this_block_idx = None
+#         if 'blocks.' in nm:
+#             try:
+#                 after = nm.split('blocks.')[1]
+#                 idx_str = after.split('.')[0]
+#                 if idx_str.isdigit():
+#                     this_block_idx = int(idx_str)
+#             except Exception:
+#                 pass
+
+#         # Apply selection policy
+#         if allowed_blocks is None:
+#             # default policy: skip LNs in blocks 9,10,11 (ViT-B typical last quarter)
+#             if any(f'blocks.{k}' in nm for k in ['9', '10', '11']):
+#                 continue
+#         else:
+#             # quarter/all policy: only allow LNs in allowed transformer blocks
+#             if this_block_idx is None or this_block_idx not in allowed_blocks:
+#                 continue
+
+#         if isinstance(m, nn.LayerNorm):
+#             for np, p in m.named_parameters():
+#                 if np in ['weight', 'bias'] and p.requires_grad:
+#                     params.append(p)
+#                     names.append(f"{nm}.{np}")
+#     return params, names
+
+def collect_params(model):
+    """Collect all trainable parameters.
+
+    Walk the model's modules and collect all parameters.
+    Return the parameters and their names.
+
+    Note: other choices of parameterization are possible!
     """
-    ln_quarter = str(ln_quarter).lower()
     params = []
     names = []
 
-    # First pass: gather transformer block indices if present
-    block_indices = set()
-    for nm, _ in model.named_modules():
-        if 'blocks.' in nm:
-            try:
-                after = nm.split('blocks.')[1]
-                idx_str = after.split('.')[0]
-                if idx_str.isdigit():
-                    block_indices.add(int(idx_str))
-            except Exception:
-                pass
-
-    sorted_blocks = sorted(block_indices)
-    n_blocks = len(sorted_blocks)
-
-    def quarter_index_ranges(n: int):
-        # Returns list of (start_inclusive, end_inclusive) for 4 quarters dividing [0, n)
-        # Use rounding to distribute remainder evenly.
-        bounds = [int(round(i * n / 4.0)) for i in range(5)]  # 0, ~n/4, ~n/2, ~3n/4, n
-        return [(bounds[i], bounds[i + 1] - 1) for i in range(4)]
-
-    allowed_blocks = None  # None means use default policy
-    if ln_quarter in ['q1', 'q2', 'q3', 'q4', 'all'] and n_blocks > 0:
-        if ln_quarter == 'all':
-            allowed_blocks = set(sorted_blocks)
-        else:
-            q_map = {'q1': 0, 'q2': 1, 'q3': 2, 'q4': 3}
-            q_idx = q_map[ln_quarter]
-            ranges = quarter_index_ranges(n_blocks)
-            # Map back to actual block indices using their sorted order
-            start_pos, end_pos = ranges[q_idx]
-            start_pos = max(0, min(start_pos, n_blocks - 1))
-            end_pos = max(start_pos, min(end_pos, n_blocks - 1))
-            allowed_blocks = set(sorted_blocks[start_pos:end_pos + 1])
-
-    # Second pass: collect LayerNorm parameters according to policy
     for nm, m in model.named_modules():
-        # Exclusions common to both policies
+        # if True:  # isinstance(m, nn.BatchNorm2d): collect all
         if 'layer4' in nm:
+            continue
+        if 'blocks.9' in nm:
+            continue
+        if 'blocks.10' in nm:
+            continue
+        if 'blocks.11' in nm:
             continue
         if 'norm.' in nm:
             continue
         if nm in ['norm']:
             continue
-
-        # Determine if this module is inside a specific transformer block
-        this_block_idx = None
-        if 'blocks.' in nm:
-            try:
-                after = nm.split('blocks.')[1]
-                idx_str = after.split('.')[0]
-                if idx_str.isdigit():
-                    this_block_idx = int(idx_str)
-            except Exception:
-                pass
-
-        # Apply selection policy
-        if allowed_blocks is None:
-            # default policy: skip LNs in blocks 9,10,11 (ViT-B typical last quarter)
-            if any(f'blocks.{k}' in nm for k in ['9', '10', '11']):
-                continue
-        else:
-            # quarter/all policy: only allow LNs in allowed transformer blocks
-            if this_block_idx is None or this_block_idx not in allowed_blocks:
-                continue
-
+            
         if isinstance(m, nn.LayerNorm):
             for np, p in m.named_parameters():
                 if np in ['weight', 'bias'] and p.requires_grad:
                     params.append(p)
                     names.append(f"{nm}.{np}")
     return params, names
-
 
 def _gaussian_kernel1d(kernel_size: int, sigma: float, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
     center = (kernel_size - 1) / 2.0

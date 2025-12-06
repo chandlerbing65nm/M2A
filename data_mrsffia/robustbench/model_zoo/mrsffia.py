@@ -17,11 +17,11 @@ from .mae_vit import create_model_mae
 
 
 def modify_head(model):
-    model.head = nn.Linear(model.head.in_features, 10)
+    model.head = nn.Linear(model.head.in_features, 4)
     return model
 
 class Hendrycks2020AugMixResNeXtNet(CifarResNeXt):
-    def __init__(self, depth=29, num_classes=10, cardinality=4, base_width=32):
+    def __init__(self, depth=29, num_classes=4, cardinality=4, base_width=32):
         super().__init__(ResNeXtBottleneck,
                          depth=depth,
                          num_classes=num_classes,
@@ -387,7 +387,7 @@ linf = OrderedDict(
         }),
         ('Gowal2020Uncovering_70_16', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=70,
                                  width=16,
                                  activation_fn=Swish,
@@ -398,7 +398,7 @@ linf = OrderedDict(
         }),
         ('Gowal2020Uncovering_70_16_extra', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=70,
                                  width=16,
                                  activation_fn=Swish,
@@ -409,7 +409,7 @@ linf = OrderedDict(
         }),
         ('Gowal2020Uncovering_34_20', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=34,
                                  width=20,
                                  activation_fn=Swish,
@@ -420,7 +420,7 @@ linf = OrderedDict(
         }),
         ('Gowal2020Uncovering_28_10_extra', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=28,
                                  width=10,
                                  activation_fn=Swish,
@@ -467,7 +467,7 @@ linf = OrderedDict(
         }),
         ('Rebuffi2021Fixing_28_10_cutmix_ddpm', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=28,
                                  width=10,
                                  activation_fn=Swish,
@@ -477,7 +477,7 @@ linf = OrderedDict(
         }),
         ('Rebuffi2021Fixing_106_16_cutmix_ddpm', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=106,
                                  width=16,
                                  activation_fn=Swish,
@@ -487,7 +487,7 @@ linf = OrderedDict(
         }),
         ('Rebuffi2021Fixing_70_16_cutmix_ddpm', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=70,
                                  width=16,
                                  activation_fn=Swish,
@@ -497,7 +497,7 @@ linf = OrderedDict(
         }),
         ('Rebuffi2021Fixing_70_16_cutmix_extra', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=70,
                                  width=16,
                                  activation_fn=Swish,
@@ -517,7 +517,7 @@ linf = OrderedDict(
         }),
         ('Rebuffi2021Fixing_R18_ddpm', {
             'model':
-            lambda: DMPreActResNet(num_classes=10,
+            lambda: DMPreActResNet(num_classes=4,
                                    depth=18,
                                    width=0,
                                    activation_fn=Swish,
@@ -527,7 +527,7 @@ linf = OrderedDict(
         }),
         ('Rade2021Helper_R18_extra', {
             'model':
-            lambda: DMPreActResNet(num_classes=10,
+            lambda: DMPreActResNet(num_classes=4,
                                    depth=18,
                                    width=0,
                                    activation_fn=Swish,
@@ -537,7 +537,7 @@ linf = OrderedDict(
         }),
         ('Rade2021Helper_R18_ddpm', {
             'model':
-            lambda: DMPreActResNet(num_classes=10,
+            lambda: DMPreActResNet(num_classes=4,
                                    depth=18,
                                    width=0,
                                    activation_fn=Swish,
@@ -547,7 +547,7 @@ linf = OrderedDict(
         }),
         ('Rade2021Helper_extra', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=34,
                                  width=10,
                                  activation_fn=Swish,
@@ -557,7 +557,7 @@ linf = OrderedDict(
         }),
         ('Rade2021Helper_ddpm', {
             'model':
-            lambda: DMWideResNet(num_classes=10,
+            lambda: DMWideResNet(num_classes=4,
                                  depth=28,
                                  width=10,
                                  activation_fn=Swish,
@@ -598,7 +598,7 @@ l2 = OrderedDict([
     }),
     ('Gowal2020Uncovering', {
       'model':
-      lambda: DMWideResNet(num_classes=10,
+      lambda: DMWideResNet(num_classes=4,
                    depth=70,
                    width=16,
                    activation_fn=Swish,
@@ -609,7 +609,7 @@ l2 = OrderedDict([
     }),
     ('Gowal2020Uncovering_extra', {
       'model':
-      lambda: DMWideResNet(num_classes=10,
+      lambda: DMWideResNet(num_classes=4,
                    depth=70,
                    width=16,
                    activation_fn=Swish,
@@ -628,7 +628,7 @@ l2 = OrderedDict([
     }),
     ('Rebuffi2021Fixing_70_16_cutmix_ddpm', {
       'model':
-      lambda: DMWideResNet(num_classes=10,
+      lambda: DMWideResNet(num_classes=4,
                            depth=70,
                            width=16,
                            activation_fn=Swish,
@@ -638,7 +638,7 @@ l2 = OrderedDict([
     }),
     ('Rebuffi2021Fixing_28_10_cutmix_ddpm', {
       'model':
-      lambda: DMWideResNet(num_classes=10,
+      lambda: DMWideResNet(num_classes=4,
                            depth=28,
                            width=10,
                            activation_fn=Swish,
@@ -648,7 +648,7 @@ l2 = OrderedDict([
     }),
     ('Rebuffi2021Fixing_70_16_cutmix_extra', {
       'model':
-      lambda: DMWideResNet(num_classes=10,
+      lambda: DMWideResNet(num_classes=4,
                            depth=70,
                            width=16,
                            activation_fn=Swish,
@@ -666,7 +666,7 @@ l2 = OrderedDict([
     }),
     ('Rebuffi2021Fixing_R18_cutmix_ddpm', {
       'model':
-      lambda: DMPreActResNet(num_classes=10,
+      lambda: DMPreActResNet(num_classes=4,
                              depth=18,
                              width=0,
                              activation_fn=Swish,
@@ -676,7 +676,7 @@ l2 = OrderedDict([
     }),
     ('Rade2021Helper_R18_ddpm', {
       'model':
-      lambda: DMPreActResNet(num_classes=10,
+      lambda: DMPreActResNet(num_classes=4,
                              depth=18,
                              width=0,
                              activation_fn=Swish,
@@ -709,7 +709,7 @@ l2 = OrderedDict([
 
 common_corruptions = OrderedDict([
     ('Rebuffi2021Fixing_70_16_cutmix_extra_Linf', {
-        'model': lambda: DMWideResNet(num_classes=10,
+        'model': lambda: DMWideResNet(num_classes=4,
                                       depth=70,
                                       width=16,
                                       activation_fn=Swish,
@@ -718,7 +718,7 @@ common_corruptions = OrderedDict([
         'gdrive_id': '1qKDTp6IJ1BUXZaRtbYuo_t0tuDl_4mLg'
     }),
     ('Rebuffi2021Fixing_70_16_cutmix_extra_L2', {
-        'model': lambda: DMWideResNet(num_classes=10,
+        'model': lambda: DMWideResNet(num_classes=4,
                                       depth=70,
                                       width=16,
                                       activation_fn=Swish,

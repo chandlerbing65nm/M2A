@@ -16,22 +16,52 @@ from robustbench.utils import clean_accuracy as accuracy
 import torch.nn as nn
 # import wandb
 from conf import cfg, load_cfg_fom_args
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
 
+def rm_substr_from_state_dict(state_dict, substr):
+    new_state_dict = OrderedDict()
+    for key in state_dict.keys():
+        if substr in key:  # to delete prefix 'module.' if it exists
+            new_key = key[len(substr):]
+            new_state_dict[new_key] = state_dict[key]
+        else:
+            new_state_dict[key] = state_dict[key]
+    return new_state_dict
+
 def evaluate(description):
+    """Evaluate M2A: Stochastic Patch Erasing with Adaptive Residual Correction
+    for Continual Test-Time Adaptation (CTTA) on CIFAR-10-C.
+
+    The evaluation iterates over corruptions/severities and measures accuracy, NLL, ECE,
+    as well as adaptation-time metrics relevant to CTTA.
+    """
     args = load_cfg_fom_args(description)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    logger.info("[cifar10] RNG seed in use: %d", cfg.RNG_SEED)
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    if cfg.TEST.ckpt is not None:
-        base_model = torch.nn.DataParallel(base_model) # make parallel
-        checkpoint = torch.load(cfg.TEST.ckpt)
-        base_model.load_state_dict(checkpoint['model'], strict=False)
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth", map_location='cpu')
+    checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
+    if isinstance(checkpoint, dict) and 'model' in checkpoint:
+        base_model.load_state_dict(checkpoint['model'], strict=True)
     else:
-        base_model = torch.nn.DataParallel(base_model) # make parallel
-    base_model.cuda()
+        base_model.load_state_dict(checkpoint, strict=True)
+    del checkpoint
+    # Apply potential adaptation checkpoint (optional)
+    if cfg.TEST.ckpt is not None:
+        if device.type == 'cuda':
+            base_model = torch.nn.DataParallel(base_model)
+        ckpt = torch.load(cfg.TEST.ckpt, map_location='cpu')
+        state = ckpt['model'] if isinstance(ckpt, dict) and 'model' in ckpt else ckpt
+        base_model.load_state_dict(state, strict=False)
+    else:
+        if device.type == 'cuda':
+            base_model = torch.nn.DataParallel(base_model)
+    base_model.to(device)
 
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
@@ -68,7 +98,7 @@ def evaluate(description):
             acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device = 'cuda')
             err = 1. - acc
             All_error.append(err)
-            logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+            logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
 
     # Save checkpoint after full evaluation if requested
     try:

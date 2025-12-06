@@ -39,7 +39,7 @@ def evaluate(description):
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_best.pth", map_location='cpu')
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/mrsffia_vitb16_384_best.pth", map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
     
     if isinstance(checkpoint, dict) and 'model' in checkpoint:
@@ -86,7 +86,7 @@ def evaluate(description):
             acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device = 'cuda')
             err = 1. - acc
             All_error.append(err)
-            logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+            logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
 
 
 def setup_tent(model):
