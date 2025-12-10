@@ -180,6 +180,25 @@ def collect_params(model):
         # if True:  # isinstance(m, nn.BatchNorm2d): collect all
         if 'layer4' in nm:
             continue
+
+        # if 'blocks.0' in nm:
+        #     continue
+        # if 'blocks.1' in nm:
+        #     continue
+        # if 'blocks.2' in nm:
+        #     continue
+        # if 'blocks.3' in nm:
+        #     continue
+        # if 'blocks.4' in nm:
+        #     continue
+        # if 'blocks.5' in nm:
+        #     continue
+        # if 'blocks.6' in nm:
+        #     continue
+        # if 'blocks.7' in nm:
+        #     continue
+        # if 'blocks.8' in nm:
+        #     continue
         if 'blocks.9' in nm:
             continue
         if 'blocks.10' in nm:

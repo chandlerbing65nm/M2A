@@ -387,7 +387,7 @@ def parse_args() -> TrainConfig:
     p.add_argument("--lr", type=float, default=5e-4)
     p.add_argument("--weight-decay", type=float, default=0.00)
     p.add_argument("--num-workers", type=int, default=4)
-    p.add_argument("--patience", type=int, default=5)
+    p.add_argument("--patience", type=int, default=0)
     p.add_argument("--tag", type=str, default=None)
     p.add_argument("--trainable", type=str, default=None,
                    help="Comma-separated indices of ViT blocks to train; use -1 to also train the head. Example: '9,10,11,-1'.")
