@@ -8,10 +8,6 @@ RNG_SEED: 1
 CORRUPTION:
   DATASET: mrsffia
   SEVERITY:
-    - 1
-    - 2
-    - 3
-    - 4
     - 5
   TYPE:
     - gaussian_noise

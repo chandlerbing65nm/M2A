@@ -14,3 +14,12 @@ CORRUPTION:
     - defocus_blur 
     - glass_blur
     - motion_blur
+    - zoom_blur
+    - snow
+    - frost
+    - fog
+    - brightness
+    - contrast
+    - elastic_transform
+    - pixelate
+    - jpeg_compression

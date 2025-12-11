@@ -24,33 +24,33 @@ export MIOPEN_FIND_MODE=1
 source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
-cd /users/doloriel/work/Repo/M2A/data_avffia
-python -m avffiac_vit \
-      --cfg cfgs/source.yaml \
-      --data_dir /flash/project_465002264/datasets/avffia \
-      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth \
-      CORRUPTION.NUM_EX 11200
+# cd /users/doloriel/work/Repo/M2A/data_avffia
+# python -m avffiac_vit \
+#       --cfg cfgs/source.yaml \
+#       --data_dir /flash/project_465002264/datasets/avffia \
+#       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth \
+#       CORRUPTION.NUM_EX 1000
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
 # python -m avffiac_vit_tent \
 #       --cfg cfgs/tent.yaml \
 #       --data_dir /flash/project_465002264/datasets/avffia \
 #       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth \
-#       CORRUPTION.NUM_EX 11200
+#       CORRUPTION.NUM_EX 1000
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
 # python -m avffiac_vit_cotta \
 #       --cfg cfgs/cotta.yaml \
 #       --data_dir /flash/project_465002264/datasets/avffia \
 #       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth \
-#       CORRUPTION.NUM_EX 11200
+#       CORRUPTION.NUM_EX 1000
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
 # python -m avffiac_vit_mae \
 #       --cfg cfgs/cmae.yaml \
 #       --data_dir /flash/project_465002264/datasets/avffia \
 #       --checkpoint /users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth \
-#       CORRUPTION.NUM_EX 11200
+#       CORRUPTION.NUM_EX 1000
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
 # python -m avffiac_vit_rem \
@@ -64,7 +64,7 @@ python -m avffiac_vit \
 #       --lr 1e-3 \
 #       --lamb 1.0 \
 #       --disable_eml \
-#       CORRUPTION.NUM_EX 11200
+#       CORRUPTION.NUM_EX 1000
 
 # cd /users/doloriel/work/Repo/M2A/data_avffia
 # python -m avffiac_vit_m2a \
@@ -83,4 +83,4 @@ python -m avffiac_vit \
 #       --num_squares 1 \
 #       --mask_type binary \
 #       --disable_erl \
-#       CORRUPTION.NUM_EX 11200
+#       CORRUPTION.NUM_EX 1000

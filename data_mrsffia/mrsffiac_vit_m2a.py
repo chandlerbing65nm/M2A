@@ -129,17 +129,17 @@ def evaluate(description):
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
             logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
-            logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
-            logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
+            # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
+            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+            # logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
             logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
             logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
             logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
             # New metrics per corruption (averaged per corruption)
             # - Adaptation Time (s): total wall-clock time spent adapting; lower is better
             # - Adaptation MACs: total MACs for adapted samples; lower is better
-            logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
-            logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
+            # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
+            # logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
 
             # Domain Shift Robustness: std of accuracies across types so far (lower is better)
             accs_so_far.append(acc)
@@ -150,7 +150,7 @@ def evaluate(description):
                 dsr = math.sqrt(var_acc)
             else:
                 dsr = 0.0
-            logger.info(f"Domain Shift Robustness (std, lower is better) up to [{corruption_type}{severity}]: {dsr:.4f}")
+            # logger.info(f"Domain Shift Robustness (std, lower is better) up to [{corruption_type}{severity}]: {dsr:.4f}")
 
             # Catastrophic Forgetting Rate (measured): re-evaluate previous corruption after current adaptation
             # CFR_current = max(0, prev_acc_at_time - prev_acc_after_current). Lower is better.
