@@ -1,0 +1,57 @@
+MODEL:
+  ADAPTATION: M2A
+  ARCH: Standard_VITB_M2A   # VIT: Standard_VITB  CNN: Standard
+  LN_QUARTER: default       # LayerNorm adaptation scope: default|q1|q2|q3|q4|all
+TEST:
+  BATCH_SIZE: 20
+RNG_SEED: 1
+CORRUPTION:
+  DATASET: avffia
+  SEVERITY:
+    - 5
+  TYPE:
+    - gaussian_noise
+    - shot_noise
+    - impulse_noise
+    - defocus_blur 
+    - glass_blur
+    - motion_blur
+OPTIM:
+  METHOD: Adam
+  STEPS: 1
+  BETA: 0.9
+  LR: 1e-3
+  WD: 0.0
+  M: 0.1
+  N: 3
+  LAMB: 1.0
+  MARGIN: 0.0
+
+# M2A: Stochastic Patch Erasing with Adaptive Residual Correction for
+# Continual Test-Time Adaptation (CTTA) defaults (can be overridden by CLI args)
+M2A:
+  # Random erasing
+  RANDOM_MASKING: spatial
+  NUM_SQUARES: 1
+  MASK_TYPE: binary
+  # Plotting losses
+  PLOT_LOSS: false
+  PLOT_LOSS_PATH: /users/doloriel/work/Repo/M2A/cifar/plots/M2A/Loss/losses.png
+  PLOT_EMA_ALPHA: 0.98
+  # MCL temperature scaling
+  MCL_TEMPERATURE: 1.0
+  MCL_TEMPERATURE_APPLY: both
+  MCL_DISTANCE: ce
+  # ERL
+  ERL_ACTIVATION: relu
+  ERL_LEAKY_RELU_SLOPE: 0.01
+  ERL_SOFTPLUS_BETA: 1.0
+  # Disable toggles
+  DISABLE_MCL: false
+  DISABLE_ERL: false
+  # LogM2A options
+  LOGM2A_ENABLE: none       # none|gamma|beta|gammabeta
+  LOGM2A_LR_MULT: 1.0
+  LOGM2A_REG: 0.0
+  LOGM2A_TEMP: 0.0
+  

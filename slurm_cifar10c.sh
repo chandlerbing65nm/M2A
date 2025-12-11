@@ -25,52 +25,57 @@ source /scratch/project_465002264/miniconda3/etc/profile.d/conda.sh
 conda activate m2a
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
+# python -m cifar10c_vit \
+#      --cfg cfgs/cifar10/source.yaml \
+#      --data_dir /scratch/project_465002264/datasets/cifar10c \
+#      --save_ckpt \
+#      CORRUPTION.NUM_EX 10000
+
+# cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_tent \
 #      --cfg cfgs/cifar10/tent.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
+#      --save_ckpt \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_cotta \
 #      --cfg cfgs/cifar10/cotta.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
+#      --save_ckpt \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
-# python -m cifar10c_vit_vida \
-#      --cfg cfgs/cifar10/vida.yaml \
+# python -m cifar10c_vit_mae\
+#      --cfg cfgs/cifar10/cmae.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/vit_1_128_vida_cifar10c.t7 \
+#      --save_ckpt \
 #      CORRUPTION.NUM_EX 10000
-
-cd /users/doloriel/work/Repo/M2A/data_cifar
-python -m cifar10c_vit_mae\
-     --cfg cfgs/cifar10/cmae.yaml \
-     --data_dir /scratch/project_465002264/datasets/cifar10c \
-     CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_rem \
 #      --cfg cfgs/cifar10/rem.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
+#      --save_ckpt \
 #      CORRUPTION.NUM_EX 10000
 
-# cd data_cifar
-# python -m cifar10c_vit_m2a \
-#      --cfg cfgs/cifar10/m2a.yaml \
-#      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --lr 1e-3 \
-#      --seed 1 \
-#      --lamb 1.0 \
-#      --margin 0.0 \
-#      --random_masking spatial \
-#      --spatial_type patch \
-#      --spectral_type all \
-#      --num_squares 1 \
-#      --mask_type binary \
-#      --m 0.1 \
-#      --n 3 \
-#      --mcl_distance ce \
-#      --steps 1 \
-#      --disable_erl \
-#      CORRUPTION.NUM_EX 100000
+cd /users/doloriel/work/Repo/M2A/data_cifar
+python -m cifar10c_vit_m2a \
+     --cfg cfgs/cifar10/m2a.yaml \
+     --data_dir /scratch/project_465002264/datasets/cifar10c \
+     --lr 1e-3 \
+     --seed 1 \
+     --lamb 1.0 \
+     --margin 0.0 \
+     --random_masking spatial \
+     --spatial_type patch \
+     --spectral_type all \
+     --num_squares 1 \
+     --mask_type binary \
+     --m 0.1 \
+     --n 3 \
+     --mcl_distance ce \
+     --steps 1 \
+     --disable_erl \
+     --save_ckpt \
+     CORRUPTION.NUM_EX 10000

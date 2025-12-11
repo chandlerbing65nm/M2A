@@ -123,8 +123,6 @@ _C.DESC = ""
 # Note that non-determinism is still present due to non-deterministic GPU ops
 _C.RNG_SEED = 1
 
-_C.PRINT_MODEL = False
-
 # Output directory
 _C.SAVE_DIR = "./output"
 
@@ -268,9 +266,6 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--save_ckpt", action="store_true",
                         help="If set, save a checkpoint of the adapted model at the end of evaluation")
 
-    parser.add_argument("--print_model", action="store_true",
-                        help="If set, only print model/params/optimizer and exit before evaluation")
-
     # M2A (CTTA) optimization CLI options
     parser.add_argument("--steps", type=int, default=None,
                         help="Number of adaptation updates per batch (maps to OPTIM.STEPS)")
@@ -356,7 +351,6 @@ def load_cfg_fom_args(description="Config options."):
     cfg.size = args.size
     cfg.DATA_DIR = args.data_dir
     cfg.TEST.ckpt = args.checkpoint
-    cfg.PRINT_MODEL = bool(args.print_model)
     # Map CLI seed to config if provided; otherwise keep YAML/default
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)

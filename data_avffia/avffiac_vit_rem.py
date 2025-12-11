@@ -1,5 +1,4 @@
 import logging
-
 import os
 
 import torch
@@ -7,17 +6,21 @@ import torch.optim as optim
 import torch.nn.functional as F
 import time
 
-from robustbench.data import load_cifar10c
+from robustbench.data import load_avffiac
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
-from collections import OrderedDict
 
-import tent
+import rem
 import torch.nn as nn
 from conf import cfg, load_cfg_fom_args
+import operators
+from collections import OrderedDict
+import numpy as np
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
 
 def rm_substr_from_state_dict(state_dict, substr):
     new_state_dict = OrderedDict()
@@ -30,48 +33,34 @@ def rm_substr_from_state_dict(state_dict, substr):
     return new_state_dict
 
 def evaluate(description):
-    """Evaluate M2A: Stochastic Patch Erasing with Adaptive Residual Correction
-    for Continual Test-Time Adaptation (CTTA) on CIFAR-10-C.
-
-    The evaluation iterates over corruptions/severities and measures accuracy, NLL, ECE,
-    as well as adaptation-time metrics relevant to CTTA.
-    """
     args = load_cfg_fom_args(description)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    logger.info("[cifar10] RNG seed in use: %d", cfg.RNG_SEED)
-
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
-    checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
-    
-    if isinstance(checkpoint, dict) and 'model' in checkpoint:
-        base_model.load_state_dict(checkpoint['model'], strict=True)
-    else:
-        base_model.load_state_dict(checkpoint, strict=True)
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth", map_location='cpu')
+    checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.')
+    base_model.load_state_dict(checkpoint, strict=True)
     del checkpoint
-    
-    # Apply potential adaptation checkpoint (optional)
     if cfg.TEST.ckpt is not None:
+        # make parallel only if CUDA is available
         if device.type == 'cuda':
             base_model = torch.nn.DataParallel(base_model)
-        ckpt = torch.load(cfg.TEST.ckpt, map_location='cpu')
-        state = ckpt['model'] if isinstance(ckpt, dict) and 'model' in ckpt else ckpt
-        base_model.load_state_dict(state, strict=False)
+        checkpoint = torch.load(cfg.TEST.ckpt, map_location='cpu')
+        base_model.load_state_dict(checkpoint['model'], strict=False)
     else:
         if device.type == 'cuda':
             base_model = torch.nn.DataParallel(base_model)
     base_model.to(device)
 
-    if cfg.MODEL.ADAPTATION == "tent":
-        logger.info("test-time adaptation: TENT")
-        model = setup_tent(base_model)
-    else:
-        raise ValueError("Unknown adaptation method: {}".format(cfg.MODEL.ADAPTATION))
-    if getattr(cfg, "PRINT_MODEL", False):
-        return
+    head_dim = 768
 
+    if cfg.MODEL.ADAPTATION == "source":
+        logger.info("test-time adaptation: NONE")
+        model = setup_source(base_model)
+    if cfg.MODEL.ADAPTATION == "REM":
+        logger.info("test-time adaptation: REM")
+        model = setup_rem(base_model)
     # evaluate on each severity and type of corruption in turn
     All_error = []
     for severity in cfg.CORRUPTION.SEVERITY:
@@ -84,19 +73,17 @@ def evaluate(description):
                     logger.warning("not resetting model")
             else:
                 logger.warning("not resetting model")
-            x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_avffiac(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
-            x_test = F.interpolate(x_test, size=(args.size, args.size), \
+            x_test = torch.nn.functional.interpolate(x_test, size=(args.size, args.size), \
                 mode='bilinear', align_corners=False)
-
-            # Reset per-corruption loss statistics if available
+            # Reset per-corruption REM loss statistics if available
             if hasattr(model, 'reset_loss_stats'):
                 try:
                     model.reset_loss_stats()
                 except Exception:
                     pass
-
             acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = compute_metrics(
                 model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
             )
@@ -105,8 +92,14 @@ def evaluate(description):
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
             logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
+            # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
             # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+            # logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
             # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
+            # logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
+            logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
+            logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
+            logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
 
     # Save checkpoint after full evaluation if requested
     try:
@@ -129,23 +122,11 @@ def evaluate(description):
         logger.warning(f"Failed to save checkpoint: {e}")
 
 
-def setup_tent(model):
-    """Set up tent adaptation.
-
-    Configure the model for training + feature modulation by batch statistics,
-    collect the parameters for feature modulation by gradient optimization,
-    set up the optimizer, and then tent the model.
-    """
-    model = tent.configure_model(model)
-    params, param_names = tent.collect_params(model)
-    optimizer = setup_optimizer(params)
-    tent_model = tent.Tent(model, optimizer,
-                           steps=cfg.OPTIM.STEPS,
-                           episodic=cfg.MODEL.EPISODIC)
-    logger.info(f"model for adaptation: %s", tent_model)
-    logger.info(f"params for adaptation: %s", param_names)
-    logger.info(f"optimizer for adaptation: %s", optimizer)
-    return tent_model
+def setup_source(model):
+    """Set up the baseline source model without adaptation."""
+    model.eval()
+    logger.info(f"model for evaluation: %s", model)
+    return model
 
 
 def setup_optimizer(params):
@@ -175,11 +156,42 @@ def setup_optimizer(params):
         raise NotImplementedError
 
 
+def setup_rem(model):
+    model = rem.configure_model(model)
+    params, param_names = rem.collect_params(model)
+    optimizer = setup_optimizer(params)
+    rem_model = rem.REM(model, optimizer,
+                           steps=cfg.OPTIM.STEPS,
+                           episodic=cfg.MODEL.EPISODIC,
+                           m = cfg.OPTIM.M,
+                           n = cfg.OPTIM.N,
+                           lamb = cfg.OPTIM.LAMB,
+                           margin = cfg.OPTIM.MARGIN,
+                           )
+    logger.info(f"optimizer for adaptation: %s", optimizer)
+    return rem_model
+
+def fmt_sci(n: int) -> str:
+    try:
+        if n == 0:
+            return "0"
+        import math
+        exp = int(math.floor(math.log10(abs(float(n)))))
+        mant = float(n) / (10 ** exp)
+        return f"{mant:.3f} x 10^{exp}"
+    except Exception:
+        return str(n)
+
+
 def compute_metrics(model: torch.nn.Module,
                     x: torch.Tensor,
                     y: torch.Tensor,
                     batch_size: int = 100,
                     device: torch.device = None):
+    """Compute ACC, NLL, ECE, mean Max-Softmax, mean Entropy, mean cosine(pred_softmax, target_onehot)
+    and adaptation timing/MACs.
+    Returns (acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last)
+    """
     if device is None:
         device = x.device
     if isinstance(device, str):
@@ -214,6 +226,7 @@ def compute_metrics(model: torch.nn.Module,
     def estimate_vit_macs_per_image(stats_src, img_size: int) -> int:
         try:
             m = unwrap_model(stats_src)
+            # crude estimate for ViT compute
             if hasattr(m, 'patch_embed') and hasattr(m.patch_embed, 'proj'):
                 ps = m.patch_embed.proj.kernel_size[0]
                 seq = (img_size // ps) ** 2 + 1
@@ -280,7 +293,7 @@ def compute_metrics(model: torch.nn.Module,
     confs_all = torch.cat(confs_all) if len(confs_all) else torch.empty(0)
     correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
     ece = compute_ece(confs_all, correct_all)
-
+    # Prefer per-corruption averages if REM exposes accumulators
     mcl_last = getattr(model, 'last_mcl', 0.0)
     erl_last = getattr(model, 'last_erl', 0.0)
     eml_last = getattr(model, 'last_eml', 0.0)
@@ -304,7 +317,6 @@ def compute_metrics(model: torch.nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-
     return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
 
 
@@ -316,17 +328,11 @@ def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) ->
     for i in range(n_bins):
         lo = bin_boundaries[i]
         hi = bin_boundaries[i + 1]
-        if i == n_bins - 1:
-            in_bin = (confs >= lo) & (confs <= hi)
-        else:
-            in_bin = (confs >= lo) & (confs < hi)
-        count = in_bin.sum().item()
-        if count == 0:
-            continue
-        conf_bin = confs[in_bin].mean().item()
-        acc_bin = correct[in_bin].mean().item()
-        prop = count / confs.numel()
-        ece += abs(acc_bin - conf_bin) * prop
+        mask = (confs >= lo) & (confs < hi)
+        if mask.any():
+            acc_bin = correct[mask].float().mean().item()
+            conf_bin = confs[mask].float().mean().item()
+            ece += (mask.float().mean().item()) * abs(acc_bin - conf_bin)
     return float(ece)
 
 

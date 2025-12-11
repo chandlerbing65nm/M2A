@@ -1,7 +1,11 @@
 import logging
 
+import os
+
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
+import time
 
 from robustbench.data import load_cifar10c
 from robustbench.model_zoo.enums import ThreatModel
@@ -62,6 +66,8 @@ def evaluate(description):
         model = setup_cotta(base_model)
     else:
         raise ValueError("Unknown adaptation method: {}".format(cfg.MODEL.ADAPTATION))
+    if getattr(cfg, "PRINT_MODEL", False):
+        return
 
     # evaluate on each severity and type of corruption in turn
     All_error = []
@@ -78,12 +84,45 @@ def evaluate(description):
             x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
-            x_test = torch.nn.functional.interpolate(x_test, size=(args.size, args.size), \
+            x_test = F.interpolate(x_test, size=(args.size, args.size), \
                 mode='bilinear', align_corners=False)
-            acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device = 'cuda')
+
+            if hasattr(model, 'reset_loss_stats'):
+                try:
+                    model.reset_loss_stats()
+                except Exception:
+                    pass
+
+            acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = compute_metrics(
+                model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
+            )
             err = 1. - acc
             All_error.append(err)
-            logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+            logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
+            logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
+            logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
+            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+            # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
+
+    # Save checkpoint after full evaluation if requested
+    try:
+        if args.save_ckpt:
+            method = str(cfg.MODEL.ADAPTATION).lower()
+            arch_tag = str(cfg.MODEL.ARCH).replace('/', '').replace('-', '').replace('_', '').lower()
+            dataset_tag = 'cifar10c'
+            ckpt_dir = '/flash/project_465002264/projects/m2a/ckpt'
+            os.makedirs(ckpt_dir, exist_ok=True)
+            filename = f"{method}_{arch_tag}_{dataset_tag}.pth"
+            path = os.path.join(ckpt_dir, filename)
+            save_model = model
+            if hasattr(save_model, 'model'):
+                save_model = save_model.model
+            if hasattr(save_model, 'module'):
+                save_model = save_model.module
+            torch.save({'model': save_model.state_dict()}, path)
+            logger.info(f"Saved checkpoint to: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to save checkpoint: {e}")
 
 
 
@@ -104,7 +143,7 @@ def setup_cotta(model):
                            rst_m=cfg.OPTIM.RST, 
                            ap=cfg.OPTIM.AP,
                            size = cfg.size)
-    logger.info(f"model for adaptation: %s", model)
+    logger.info(f"model for adaptation: %s", cotta_model)
     logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return cotta_model
@@ -134,6 +173,162 @@ def setup_optimizer(params):
                    nesterov=cfg.OPTIM.NESTEROV)
     else:
         raise NotImplementedError
+
+
+def compute_metrics(model: torch.nn.Module,
+                    x: torch.Tensor,
+                    y: torch.Tensor,
+                    batch_size: int = 100,
+                    device: torch.device = None):
+    if device is None:
+        device = x.device
+    if isinstance(device, str):
+        device = torch.device(device)
+    total_cnt = x.shape[0]
+    n_batches = int((total_cnt + batch_size - 1) // batch_size)
+
+    correct = 0
+    total_eval = 0
+    nll_sum = 0.0
+    max_softmax_sum = 0.0
+    entropy_sum = 0.0
+    cos_sum = 0.0
+    confs_all = []
+    correct_all = []
+    adapt_time_total = 0.0
+    adapt_macs_total = 0
+
+    def unwrap_model(m):
+        try:
+            while True:
+                if hasattr(m, 'module'):
+                    m = m.module
+                elif hasattr(m, 'model'):
+                    m = getattr(m, 'model')
+                else:
+                    break
+        except Exception:
+            pass
+        return m
+
+    def estimate_vit_macs_per_image(stats_src, img_size: int) -> int:
+        try:
+            m = unwrap_model(stats_src)
+            if hasattr(m, 'patch_embed') and hasattr(m.patch_embed, 'proj'):
+                ps = m.patch_embed.proj.kernel_size[0]
+                seq = (img_size // ps) ** 2 + 1
+            else:
+                ps = 16
+                seq = (img_size // ps) ** 2 + 1
+            heads = getattr(getattr(m, 'blocks', [None])[0], 'attn', None)
+            num_heads = getattr(heads, 'num_heads', 12) if heads is not None else 12
+            d_model = getattr(m, 'embed_dim', 768)
+            attn_cost = 2 * (seq ** 2) * num_heads
+            proj_cost = 3 * seq * d_model * d_model
+            mlp_cost = 2 * seq * d_model * (4 * d_model)
+            blocks = len(getattr(m, 'blocks', [])) or 12
+            total = blocks * (attn_cost + proj_cost + mlp_cost)
+            return int(total)
+        except Exception:
+            return 0
+
+    per_img_macs = estimate_vit_macs_per_image(model, img_size=x.shape[-1])
+
+    for i in range(n_batches):
+        lo = i * batch_size
+        hi = min((i + 1) * batch_size, total_cnt)
+        x_b = x[lo:hi].to(device)
+        y_b = y[lo:hi].to(device)
+        t0 = time.time()
+        output = model(x_b)
+        adapt_time_total += (time.time() - t0)
+        adapt_macs_total += per_img_macs * int(x_b.shape[0])
+
+        logits = output if isinstance(output, torch.Tensor) else output[0]
+        preds = logits.argmax(dim=1)
+        correct += (preds == y_b).float().sum().item()
+        total_eval += y_b.shape[0]
+        nll_sum += F.cross_entropy(logits, y_b, reduction='sum').item()
+        probs = logits.softmax(dim=1)
+        confs = probs.max(dim=1).values
+        ents = -(probs * probs.clamp_min(1e-12).log()).sum(dim=1)
+        one_hot = F.one_hot(y_b.long(), num_classes=logits.shape[-1]).float()
+        cos_b = F.cosine_similarity(probs, one_hot, dim=1)
+        confs_all.append(confs.detach().cpu())
+        correct_all.append((preds == y_b).detach().cpu())
+        max_softmax_sum += float(confs.sum().item())
+        entropy_sum += float(ents.sum().item())
+        cos_sum += float(cos_b.sum().item())
+
+    if total_eval == 0:
+        mcl_last = getattr(model, 'last_mcl', 0.0)
+        erl_last = getattr(model, 'last_erl', 0.0)
+        eml_last = getattr(model, 'last_eml', 0.0)
+        try:
+            mcl_last = float(mcl_last)
+            erl_last = float(erl_last)
+            eml_last = float(eml_last)
+        except Exception:
+            mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+
+    acc = correct / total_eval
+    nll = nll_sum / total_eval
+    max_softmax = max_softmax_sum / total_eval if total_eval > 0 else 0.0
+    entropy = entropy_sum / total_eval if total_eval > 0 else 0.0
+    cos_sim = cos_sum / total_eval if total_eval > 0 else 0.0
+    confs_all = torch.cat(confs_all) if len(confs_all) else torch.empty(0)
+    correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
+    ece = compute_ece(confs_all, correct_all)
+
+    mcl_last = getattr(model, 'last_mcl', 0.0)
+    erl_last = getattr(model, 'last_erl', 0.0)
+    eml_last = getattr(model, 'last_eml', 0.0)
+    try:
+        count = float(getattr(model, 'loss_count', 0.0))
+        if count > 0.0:
+            mcl_sum = float(getattr(model, 'mcl_sum', 0.0))
+            erl_sum = float(getattr(model, 'erl_sum', 0.0))
+            eml_sum = float(getattr(model, 'eml_sum', 0.0))
+            mcl_last = mcl_sum / count
+            erl_last = erl_sum / count
+            eml_last = eml_sum / count
+        else:
+            mcl_last = float(mcl_last)
+            erl_last = float(erl_last)
+            eml_last = float(eml_last)
+    except Exception:
+        try:
+            mcl_last = float(mcl_last)
+            erl_last = float(erl_last)
+            eml_last = float(eml_last)
+        except Exception:
+            mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
+
+    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+
+
+def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
+    if confs.numel() == 0:
+        return 0.0
+    ece = 0.0
+    bin_boundaries = torch.linspace(0, 1, steps=n_bins + 1)
+    for i in range(n_bins):
+        lo = bin_boundaries[i]
+        hi = bin_boundaries[i + 1]
+        if i == n_bins - 1:
+            in_bin = (confs >= lo) & (confs <= hi)
+        else:
+            in_bin = (confs >= lo) & (confs < hi)
+        count = in_bin.sum().item()
+        if count == 0:
+            continue
+        conf_bin = confs[in_bin].mean().item()
+        acc_bin = correct[in_bin].mean().item()
+        prop = count / confs.numel()
+        ece += abs(acc_bin - conf_bin) * prop
+    return float(ece)
+
 
 if __name__ == '__main__':
     evaluate('"CIFAR-10-C evaluation.')

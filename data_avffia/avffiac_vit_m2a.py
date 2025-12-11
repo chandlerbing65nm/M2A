@@ -9,7 +9,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 
-from robustbench.data import load_cifar10c
+from robustbench.data import load_avffiac
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
@@ -44,7 +44,7 @@ def evaluate(description):
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth", map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
     if isinstance(checkpoint, dict) and 'model' in checkpoint:
         base_model.load_state_dict(checkpoint['model'], strict=True)
@@ -72,8 +72,6 @@ def evaluate(description):
     else:
         logger.info("Unknown adaptation; defaulting to source")
         model = setup_source(base_model)
-    if getattr(cfg, "PRINT_MODEL", False):
-        return
 
     # evaluate on each severity and type of corruption in turn
     all_error = []
@@ -107,7 +105,7 @@ def evaluate(description):
             else:
                 logger.info("")
                 logger.warning("not resetting model")
-            x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_avffiac(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
             x_test = F.interpolate(x_test, size=(args.size, args.size),
@@ -181,16 +179,7 @@ def evaluate(description):
             ckpt_dir = '/flash/project_465002264/projects/m2a/ckpt'
             os.makedirs(ckpt_dir, exist_ok=True)
             mask_tag = f"_{str(args.random_masking).lower()}" if (method == 'm2a' and getattr(args, 'random_masking', None)) else ""
-            disable_tag = ""
-            if method == 'm2a':
-                try:
-                    if getattr(cfg.M2A, 'DISABLE_MCL', False):
-                        disable_tag += '_disable_mcl'
-                    if getattr(cfg.M2A, 'DISABLE_EML', False):
-                        disable_tag += '_disable_eml'
-                except Exception:
-                    pass
-            filename = f"{method}_{arch_tag}{mask_tag}{disable_tag}_{dataset_tag}.pth"
+            filename = f"{method}_{arch_tag}{mask_tag}_{dataset_tag}.pth"
             path = os.path.join(ckpt_dir, filename)
             save_model = model
             if hasattr(save_model, 'model'):
@@ -429,7 +418,7 @@ def setup_optimizer(params):
 
 def setup_m2a(model):
     model = m2a.configure_model(model)
-    params, param_names = m2a.collect_params(model, ln_quarter=cfg.MODEL.LN_QUARTER)
+    params, param_names = m2a.collect_params(model)
     if cfg.OPTIM.METHOD == 'Adam':
         optimizer = optim.Adam(params,
                                lr=cfg.OPTIM.LR,
@@ -445,12 +434,12 @@ def setup_m2a(model):
     else:
         raise NotImplementedError
     # Debug logging
-    # try:
-    #     logger.info(f"model for adaptation: %s", model)
-    #     logger.info(f"params for adaptation: %s", param_names)
-    #     logger.info(f"optimizer for adaptation: %s", optimizer)
-    # except Exception:
-    #     pass
+    try:
+        logger.info(f"[setup_m2a] collected params: total={len(param_names)}")
+        lrs = [pg.get('lr', None) for pg in optimizer.param_groups]
+        logger.info(f"[setup_m2a] optimizer: {optimizer.__class__.__name__}, lrs={lrs}")
+    except Exception:
+        pass
     m2a_model = m2a.M2A(
         model, optimizer,
         steps=cfg.OPTIM.STEPS,
@@ -483,8 +472,6 @@ def setup_m2a(model):
         logm2a_temp=cfg.M2A.LOGM2A_TEMP,
         
     )
-    logger.info(f"model for adaptation: %s", m2a_model)
-    logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return m2a_model
 

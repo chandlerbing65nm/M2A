@@ -1,15 +1,15 @@
 import logging
-import os
 
 import torch
 import torch.optim as optim
 
-from robustbench.data import load_cifar10c
+from robustbench.data import load_avffiac
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 from robustbench.utils import clean_accuracy as accuracy
 from collections import OrderedDict
 
+import vida
 import torch.nn as nn
 from conf import cfg, load_cfg_fom_args
 
@@ -36,11 +36,10 @@ def evaluate(description):
     args = load_cfg_fom_args(description)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info("[cifar10] RNG seed in use: %d", cfg.RNG_SEED)
-
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
+    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/avffia_vitb16_384_best.pth", map_location='cpu')
     checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
     
     if isinstance(checkpoint, dict) and 'model' in checkpoint:
@@ -48,24 +47,27 @@ def evaluate(description):
     else:
         base_model.load_state_dict(checkpoint, strict=True)
     del checkpoint
-    
-    # Apply potential adaptation checkpoint (optional)
-    if cfg.TEST.ckpt is not None:
-        if device.type == 'cuda':
-            base_model = torch.nn.DataParallel(base_model)
-        ckpt = torch.load(cfg.TEST.ckpt, map_location='cpu')
-        state = ckpt['model'] if isinstance(ckpt, dict) and 'model' in ckpt else ckpt
-        base_model.load_state_dict(state, strict=False)
-    else:
-        if device.type == 'cuda':
-            base_model = torch.nn.DataParallel(base_model)
+
+    # # Apply potential adaptation checkpoint (optional)
+    # if cfg.TEST.ckpt is not None:
+    #     if device.type == 'cuda':
+    #         base_model = torch.nn.DataParallel(base_model)
+    #     ckpt = torch.load(cfg.TEST.ckpt, map_location='cpu')
+    #     state = ckpt['model'] if isinstance(ckpt, dict) and 'model' in ckpt else ckpt
+    #     base_model.load_state_dict(state, strict=False)
+    # else:
+    #     if device.type == 'cuda':
+    #         base_model = torch.nn.DataParallel(base_model)
     base_model.to(device)
 
-    if cfg.MODEL.ADAPTATION == "source":
-        logger.info("test-time adaptation: NONE")
-        model = setup_source(base_model)
-    if getattr(cfg, "PRINT_MODEL", False):
-        return
+
+    if cfg.MODEL.ADAPTATION == "vida":
+        logger.info("test-time adaptation: ViDA")
+        model = setup_vida(args, base_model)
+    else:
+        raise ValueError("Unknown adaptation method: {}".format(cfg.MODEL.ADAPTATION))
+    
+    # evaluate on each severity and type of corruption in turn
     All_error = []
     for severity in cfg.CORRUPTION.SEVERITY:
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -77,7 +79,7 @@ def evaluate(description):
                     logger.warning("not resetting model")
             else:
                 logger.warning("not resetting model")
-            x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_avffiac(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
             x_test = torch.nn.functional.interpolate(x_test, size=(args.size, args.size), \
@@ -85,33 +87,8 @@ def evaluate(description):
             acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device = 'cuda')
             err = 1. - acc
             All_error.append(err)
-            logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+            logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
 
-    # Save checkpoint after full evaluation if requested
-    try:
-        if args.save_ckpt:
-            method = str(cfg.MODEL.ADAPTATION).lower()
-            arch_tag = str(cfg.MODEL.ARCH).replace('/', '').replace('-', '').replace('_', '').lower()
-            dataset_tag = 'cifar10c'
-            ckpt_dir = '/flash/project_465002264/projects/m2a/ckpt'
-            os.makedirs(ckpt_dir, exist_ok=True)
-            filename = f"{method}_{arch_tag}_{dataset_tag}.pth"
-            path = os.path.join(ckpt_dir, filename)
-            save_model = model
-            if hasattr(save_model, 'model'):
-                save_model = save_model.model
-            if hasattr(save_model, 'module'):
-                save_model = save_model.module
-            torch.save({'model': save_model.state_dict()}, path)
-            logger.info(f"Saved checkpoint to: {path}")
-    except Exception as e:
-        logger.warning(f"Failed to save checkpoint: {e}")
-
-def setup_source(model):
-    """Set up the baseline source model without adaptation."""
-    model.eval()
-    logger.info(f"model for evaluation: %s", model)
-    return model
 
 def setup_optimizer(params):
     """Set up optimizer for tent adaptation.
@@ -139,5 +116,34 @@ def setup_optimizer(params):
     else:
         raise NotImplementedError
 
+def setup_vida(args, model):
+    model = vida.configure_model(model, cfg)
+    model_param, vida_param = vida.collect_params(model)
+    optimizer = setup_optimizer_vida(model_param, vida_param, cfg.OPTIM.LR, cfg.OPTIM.ViDALR)
+    vida_model = vida.ViDA(model, optimizer,
+                           steps=cfg.OPTIM.STEPS,
+                           episodic=cfg.MODEL.EPISODIC,
+                           unc_thr = args.unc_thr,
+                           ema = cfg.OPTIM.MT,
+                           ema_vida = cfg.OPTIM.MT_ViDA,
+                           )
+    logger.info(f"model for adaptation: %s", model)
+    logger.info(f"optimizer for adaptation: %s", optimizer)
+    return vida_model
+
+def setup_optimizer_vida(params, params_vida, model_lr, vida_lr):
+    if cfg.OPTIM.METHOD == 'Adam':
+        return optim.Adam([{"params": params, "lr": model_lr},
+                                  {"params": params_vida, "lr": vida_lr}],
+                                 lr=1e-5, betas=(cfg.OPTIM.BETA, 0.999),weight_decay=cfg.OPTIM.WD)
+
+    elif cfg.OPTIM.METHOD == 'SGD':
+        return optim.SGD([{"params": params, "lr": model_lr},
+                                  {"params": params_vida, "lr": vida_lr}],
+                                    momentum=cfg.OPTIM.MOMENTUM,dampening=cfg.OPTIM.DAMPENING,
+                                    nesterov=cfg.OPTIM.NESTEROV,
+                                 lr=1e-5,weight_decay=cfg.OPTIM.WD)
+    else:
+        raise NotImplementedError
 if __name__ == '__main__':
     evaluate('"CIFAR-10-C evaluation.')

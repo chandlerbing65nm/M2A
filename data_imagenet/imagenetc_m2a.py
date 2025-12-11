@@ -61,8 +61,8 @@ def evaluate(description):
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
             logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
-            logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+            # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
+            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
 
     try:
         if getattr(args, "save_ckpt", False):

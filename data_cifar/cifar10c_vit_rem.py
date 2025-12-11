@@ -61,6 +61,8 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "REM":
         logger.info("test-time adaptation: REM")
         model = setup_rem(base_model)
+    if getattr(cfg, "PRINT_MODEL", False):
+        return
     # evaluate on each severity and type of corruption in turn
     All_error = []
     for severity in cfg.CORRUPTION.SEVERITY:
@@ -92,11 +94,11 @@ def evaluate(description):
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
             logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
-            logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
-            logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
-            logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
-            logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
+            # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
+            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+            # logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
+            # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
+            # logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
             logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
             logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
             logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
@@ -168,6 +170,8 @@ def setup_rem(model):
                            lamb = cfg.OPTIM.LAMB,
                            margin = cfg.OPTIM.MARGIN,
                            )
+    logger.info(f"model for adaptation: %s", rem_model)
+    logger.info(f"params for adaptation: %s", param_names)
     logger.info(f"optimizer for adaptation: %s", optimizer)
     return rem_model
 
