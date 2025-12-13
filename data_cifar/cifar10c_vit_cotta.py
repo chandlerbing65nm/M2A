@@ -414,43 +414,42 @@ def _extract_features_and_logits(base_model: torch.nn.Module,
     return feats, logits
 
 
-def _extract_features_logits_and_block_cls(base_model: torch.nn.Module,
-                                           x_b: torch.Tensor):
-    core = base_model
+def _extract_blockwise_tokens_and_logits(core: torch.nn.Module, x_b: torch.Tensor):
     if hasattr(core, "module"):
         core = core.module
+    if not (hasattr(core, "patch_embed") and hasattr(core, "cls_token") and hasattr(core, "pos_embed") and hasattr(core, "pos_drop") and hasattr(core, "blocks") and hasattr(core, "norm")):
+        feats, logits = _extract_features_and_logits(core, x_b)
+        return feats, logits, [], [], []
 
-    feats = None
-    logits = None
-    cls_blocks = []
+    x = core.patch_embed(x_b)
+    cls_token = core.cls_token.expand(x.shape[0], -1, -1)
+    x = torch.cat((cls_token, x), dim=1)
+    x = core.pos_drop(x + core.pos_embed)
 
-    try:
-        x = core.patch_embed(x_b)
-        cls_token = core.cls_token.expand(x.shape[0], -1, -1)
-        x = torch.cat((cls_token, x), dim=1)
-        x = x + core.pos_embed
-        x = core.pos_drop(x)
+    class_tokens = []
+    patch_means = []
+    patch_stds = []
 
-        for blk in core.blocks:
-            x = blk(x)
-            if isinstance(x, tuple):
-                x = x[0]
-            cls_blocks.append(x[:, 0])
+    for blk in core.blocks:
+        x = blk(x)
+        cls_t = x[:, 0, :]
+        patches = x[:, 1:, :]
+        patch_mean = patches.mean(dim=1)
+        patch_std = patches.std(dim=1, unbiased=False)
+        class_tokens.append(cls_t)
+        patch_means.append(patch_mean)
+        patch_stds.append(patch_std)
 
-        x = core.norm(x)
-        feats = x[:, 0]
+    x_norm = core.norm(x)
+    feats = x_norm[:, 0]
+    if hasattr(core, "forward_head"):
+        logits = core.forward_head(feats)
+    elif hasattr(core, "head") and isinstance(core.head, nn.Module):
+        logits = core.head(feats)
+    else:
+        logits = core(x_b)
 
-        if hasattr(core, "forward_head"):
-            logits = core.forward_head(feats)
-        elif hasattr(core, "head") and isinstance(core.head, nn.Module):
-            logits = core.head(feats)
-        else:
-            logits = core(x_b)
-    except Exception:
-        feats, logits = _extract_features_and_logits(base_model, x_b)
-        cls_blocks = []
-
-    return feats, logits, cls_blocks
+    return feats, logits, class_tokens, patch_means, patch_stds
 
 
 def save_domain_features(method_name: str,
@@ -473,26 +472,27 @@ def save_domain_features(method_name: str,
         logit_list = []
         label_list = []
 
+        cls_blocks_lists = None
+        pmean_blocks_lists = None
+        pstd_blocks_lists = None
         with torch.no_grad():
             for start in range(0, total, batch_size):
                 end = min(start + batch_size, total)
                 x_b = x[start:end].to(device)
                 y_b = y[start:end].to(device)
-                feats_b, logits_b, cls_blocks_b = _extract_features_logits_and_block_cls(base_model, x_b)
+                feats_b, logits_b, cls_blocks, pmeans_b, pstds_b = _extract_blockwise_tokens_and_logits(base_model, x_b)
                 feat_list.append(feats_b.detach().cpu())
                 logit_list.append(logits_b.detach().cpu())
                 label_list.append(y_b.detach().cpu())
-                # accumulate per-block CLS features
-                try:
-                    core = base_model.module if hasattr(base_model, "module") else base_model
-                    num_blocks = len(core.blocks) if hasattr(core, "blocks") else 0
-                except Exception:
-                    num_blocks = 0
-                if num_blocks and cls_blocks_b:
-                    if 'per_block_lists' not in locals():
-                        per_block_lists = [[] for _ in range(len(cls_blocks_b))]
-                    for i, cls_i in enumerate(cls_blocks_b):
-                        per_block_lists[i].append(cls_i.detach().cpu())
+                if cls_blocks_lists is None:
+                    L = len(cls_blocks)
+                    cls_blocks_lists = [[] for _ in range(L)]
+                    pmean_blocks_lists = [[] for _ in range(L)]
+                    pstd_blocks_lists = [[] for _ in range(L)]
+                for i_b, (cb, mb, sb) in enumerate(zip(cls_blocks, pmeans_b, pstds_b)):
+                    cls_blocks_lists[i_b].append(cb.detach().cpu())
+                    pmean_blocks_lists[i_b].append(mb.detach().cpu())
+                    pstd_blocks_lists[i_b].append(sb.detach().cpu())
 
         if not feat_list:
             return None
@@ -513,16 +513,14 @@ def save_domain_features(method_name: str,
             "predictions": preds_t.numpy(),
             "labels": labels_t.numpy(),
         }
-        # add intermediate block CLS features as features_1 .. features_{N-1}
-        try:
-            if 'per_block_lists' in locals() and len(per_block_lists) > 0:
-                num_blocks = len(per_block_lists)
-                for bi in range(max(0, num_blocks - 1)):
-                    arr = torch.cat(per_block_lists[bi], dim=0).numpy()
-                    key = f"features_{bi+1}"
-                    domain_data[key] = arr
-        except Exception:
-            pass
+        if cls_blocks_lists is not None:
+            for i in range(len(cls_blocks_lists)):
+                cls_cat = torch.cat(cls_blocks_lists[i], dim=0).numpy()
+                pm_cat = torch.cat(pmean_blocks_lists[i], dim=0).numpy()
+                ps_cat = torch.cat(pstd_blocks_lists[i], dim=0).numpy()
+                domain_data[f"class_features_{i+1}"] = cls_cat
+                domain_data[f"patch_mean_{i+1}"] = pm_cat
+                domain_data[f"patch_std_{i+1}"] = ps_cat
         return domain_data
     except Exception as e:
         logger.warning(f"Failed to build features for {corruption_type}{severity}: {e}")

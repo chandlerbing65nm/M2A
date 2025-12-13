@@ -142,9 +142,10 @@ def compute_intra_class_series_for_file(path: str, use_what: str) -> Tuple[np.nd
     for corr in CORRUPTIONS:
         dom = domains[corr]
         if use_what not in dom:
-            feat_keys = sorted([k for k in dom.keys() if (k == "features" or k.startswith("features_"))])
+            sample_keys = sorted(list(dom.keys()))
             raise KeyError(
-                f"Key '{use_what}' not found in domain '{corr}'. Available feature keys: {feat_keys}"
+                f"Key '{use_what}' not found in domain '{corr}' of file {path}.\n"
+                f"Available keys include: {sample_keys}"
             )
         feats = np.asarray(dom[use_what])
         labs = np.asarray(dom["labels"])
@@ -207,8 +208,8 @@ def main():
     )
     parser.add_argument(
         "--use_what",
-        default="features",
-        help="Which representation to use (e.g., 'features' or 'features_1', 'features_2', ...)",
+        default="class_features_12",
+        help="Which blockwise key to use (e.g., class_features_1..N, patch_mean_1..N, patch_std_1..N)",
     )
     args = parser.parse_args()
 
