@@ -288,6 +288,50 @@ def _extract_features_and_logits(base_model: torch.nn.Module,
     return feats, logits
 
 
+def _extract_features_logits_and_block_cls(base_model: torch.nn.Module,
+                                           x_b: torch.Tensor):
+    core = base_model
+    if hasattr(core, "module"):
+        core = core.module
+
+    # If model exposes forward_features, fall back to existing path for final features
+    # but also try to manually iterate blocks to capture per-block CLS tokens.
+    feats = None
+    logits = None
+    cls_blocks = []
+
+    try:
+        # Manual forward to record per-block CLS embeddings
+        x = core.patch_embed(x_b)
+        cls_token = core.cls_token.expand(x.shape[0], -1, -1)
+        x = torch.cat((cls_token, x), dim=1)
+        x = x + core.pos_embed
+        x = core.pos_drop(x)
+
+        # iterate over transformer blocks, capture CLS after each
+        for blk in core.blocks:
+            x = blk(x)
+            if isinstance(x, tuple):
+                x = x[0]
+            cls_blocks.append(x[:, 0])
+
+        x = core.norm(x)
+        feats = x[:, 0]
+
+        if hasattr(core, "forward_head"):
+            logits = core.forward_head(feats)
+        elif hasattr(core, "head") and isinstance(core.head, nn.Module):
+            logits = core.head(feats)
+        else:
+            logits = core(x_b)
+    except Exception:
+        # Fallback to original extractor without per-block features
+        feats, logits = _extract_features_and_logits(base_model, x_b)
+        cls_blocks = []
+
+    return feats, logits, cls_blocks
+
+
 def save_domain_features(method_name: str,
                          model: torch.nn.Module,
                          x: torch.Tensor,
@@ -308,10 +352,21 @@ def save_domain_features(method_name: str,
                 end = min(start + batch_size, total)
                 x_b = x[start:end].to(device)
                 y_b = y[start:end].to(device)
-                feats_b, logits_b = _extract_features_and_logits(base_model, x_b)
+                feats_b, logits_b, cls_blocks_b = _extract_features_logits_and_block_cls(base_model, x_b)
                 feat_list.append(feats_b.detach().cpu())
                 logit_list.append(logits_b.detach().cpu())
                 label_list.append(y_b.detach().cpu())
+                # accumulate per-block features
+                try:
+                    core = base_model.module if hasattr(base_model, "module") else base_model
+                    num_blocks = len(core.blocks) if hasattr(core, "blocks") else 0
+                except Exception:
+                    num_blocks = 0
+                if num_blocks and cls_blocks_b:
+                    if 'per_block_lists' not in locals():
+                        per_block_lists = [[] for _ in range(len(cls_blocks_b))]
+                    for i, cls_i in enumerate(cls_blocks_b):
+                        per_block_lists[i].append(cls_i.detach().cpu())
 
         if not feat_list:
             return None
@@ -332,6 +387,17 @@ def save_domain_features(method_name: str,
             "predictions": preds_t.numpy(),
             "labels": labels_t.numpy(),
         }
+        # add intermediate block CLS features as features_1 .. features_{N-1}
+        try:
+            if 'per_block_lists' in locals() and len(per_block_lists) > 0:
+                num_blocks = len(per_block_lists)
+                # concatenate each block's batches, exclude last block (final features saved separately)
+                for bi in range(max(0, num_blocks - 1)):
+                    arr = torch.cat(per_block_lists[bi], dim=0).numpy()
+                    key = f"features_{bi+1}"
+                    domain_data[key] = arr
+        except Exception:
+            pass
         return domain_data
     except Exception as e:
         logger.warning(f"Failed to build features for {corruption_type}{severity}: {e}")
