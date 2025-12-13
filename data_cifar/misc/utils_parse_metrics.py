@@ -12,11 +12,11 @@ PATTERNS = {
     "Error": re.compile(r"Error % \[[^\]]+\]:\s*([\d.]+)%"),
     "NLL": re.compile(r"NLL \[[^\]]+\]:\s*([\d.]+)"),
     "ECE": re.compile(r"ECE \[[^\]]+\]:\s*([\d.]+)"),
-    "Adaptation Time": re.compile(r"Adaptation Time .*?\[[^\]]+\]:\s*([\d.]+)s"),
+    # "Adaptation Time": re.compile(r"Adaptation Time .*?\[[^\]]+\]:\s*([\d.]+)s"),
     # MACs may appear as a float or like "5.548 x 10^14"
-    "Adaptation MACs": re.compile(r"Adaptation MACs .*?\[[^\]]+\]:\s*(.+)$"),
-    "Domain Shift Robustness": re.compile(r"Domain Shift Robustness .*?\[[^\]]+\]:\s*([\d.]+)"),
-    "Catastrophic Forgetting Rate": re.compile(r"Catastrophic Forgetting Rate .*? after \[[^\]]+\]:\s*([\d.]+)")
+    # "Adaptation MACs": re.compile(r"Adaptation MACs .*?\[[^\]]+\]:\s*(.+)$"),
+    # "Domain Shift Robustness": re.compile(r"Domain Shift Robustness .*?\[[^\]]+\]:\s*([\d.]+)"),
+    # "Catastrophic Forgetting Rate": re.compile(r"Catastrophic Forgetting Rate .*? after \[[^\]]+\]:\s*([\d.]+)")
 }
 
 SCIENTIFIC_MACS_RE = re.compile(r"^\s*([\d.]+)\s*[xX]\s*10\^([+\-]?\d+)\s*$")

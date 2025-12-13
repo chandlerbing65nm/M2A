@@ -8,6 +8,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from robustbench.data import load_cifar10c
 from robustbench.model_zoo.enums import ThreatModel
@@ -66,12 +67,15 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE (source)")
         model = setup_source(base_model)
+        method_name = "source"
     elif cfg.MODEL.ADAPTATION == "M2A":
         logger.info("test-time adaptation: M2A")
         model = setup_m2a(base_model)
+        method_name = _build_m2a_method_name()
     else:
         logger.info("Unknown adaptation; defaulting to source")
         model = setup_source(base_model)
+        method_name = "source"
     if getattr(cfg, "PRINT_MODEL", False):
         return
 
@@ -94,6 +98,7 @@ def evaluate(description):
         except Exception:
             return str(n)
     for severity in cfg.CORRUPTION.SEVERITY:
+        severity_domains = {}
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
             if i_c == 0:
                 try:
@@ -123,7 +128,8 @@ def evaluate(description):
                 except Exception:
                     pass
             metrics = compute_metrics(
-                model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
+                model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
+                tag=f"[{corruption_type}{severity}]"
             )
             acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = metrics
             err = 1. - acc
@@ -143,6 +149,21 @@ def evaluate(description):
             # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
             # logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
 
+            if getattr(args, "save_feat", False):
+                domain_data = save_domain_features(
+                    method_name=method_name,
+                    model=model,
+                    x=x_test,
+                    y=y_test,
+                    severity=severity,
+                    corruption_type=corruption_type,
+                    batch_size=cfg.TEST.BATCH_SIZE,
+                    device=device,
+                )
+                if domain_data is not None:
+                    domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
+                    severity_domains[domain_id] = domain_data
+
             # Domain Shift Robustness: std of accuracies across types so far (lower is better)
             accs_so_far.append(acc)
             if len(accs_so_far) >= 2:
@@ -153,24 +174,11 @@ def evaluate(description):
             else:
                 dsr = 0.0
             # logger.info(f"Domain Shift Robustness (std, lower is better) up to [{corruption_type}{severity}]: {dsr:.4f}")
-
-            # Catastrophic Forgetting Rate (measured): re-evaluate previous corruption after current adaptation
-            # CFR_current = max(0, prev_acc_at_time - prev_acc_after_current). Lower is better.
-            if prev_x is not None and prev_y is not None and prev_acc_at_time is not None:
-                try:
-                    m2a_model = model.module if hasattr(model, 'module') else model
-                    ctx = m2a_model.no_adapt_mode() if hasattr(m2a_model, 'no_adapt_mode') else nullcontext()
-                except Exception:
-                    ctx = nullcontext()
-                with ctx:
-                    re_metrics = compute_metrics(
-                        model, prev_x, prev_y, cfg.TEST.BATCH_SIZE, device=device
-                    )
-                    re_acc = re_metrics[0]
-                cfr_measured = max(0.0, float(prev_acc_at_time) - float(re_acc))
-                logger.info(f"Catastrophic Forgetting Rate (prev-domain, lower is better) after [{corruption_type}{severity}]: {cfr_measured:.4f}")
             # Update previous corruption cache for next iteration
             prev_x, prev_y, prev_acc_at_time = x_test, y_test, acc
+
+        if getattr(args, "save_feat", False):
+            save_severity_features(method_name, severity, severity_domains)
 
     # Save checkpoint after full evaluation if requested
     try:
@@ -216,7 +224,8 @@ def compute_metrics(model: nn.Module,
                     x: torch.Tensor,
                     y: torch.Tensor,
                     batch_size: int = 100,
-                    device: torch.device = None):
+                    device: torch.device = None,
+                    tag: str = ""):
     """Compute ACC, NLL, ECE, mean Max-Softmax, mean Entropy, mean cosine(pred_softmax, target_onehot)
     and accumulate adaptation timing/MACs during M2A CTTA.
     Returns (acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last)
@@ -315,9 +324,12 @@ def compute_metrics(model: nn.Module,
             # Handle outputs (logits)
             logits = output
             preds = logits.argmax(dim=1)
-            correct += (preds == y_eval).float().sum().item()
-            total_eval += y_eval.shape[0]
-            nll_sum += F.cross_entropy(logits, y_eval, reduction='sum').item()
+            correct_batch = (preds == y_eval).float().sum().item()
+            total_batch = y_eval.shape[0]
+            correct += correct_batch
+            total_eval += total_batch
+            batch_nll_sum = F.cross_entropy(logits, y_eval, reduction='sum').item()
+            nll_sum += batch_nll_sum
             probs = logits.softmax(dim=1)
             confs = probs.max(dim=1).values
             # Entropy per sample: -sum p * log p
@@ -330,6 +342,17 @@ def compute_metrics(model: nn.Module,
             max_softmax_sum += float(confs.sum().item())
             entropy_sum += float(ents.sum().item())
             cos_sum += float(cos_b.sum().item())
+
+            if getattr(cfg.TEST, "BATCH_METRICS", False):
+                batch_acc = correct_batch / total_batch if total_batch > 0 else 0.0
+                batch_err = 1.0 - batch_acc
+                batch_nll = batch_nll_sum / total_batch if total_batch > 0 else 0.0
+                batch_ece = compute_ece(confs.detach(), (preds == y_eval).float().detach())
+                prefix = f"{tag} " if tag else ""
+                logger.info(
+                    f"[BATCH_METRICS] {prefix}batch {b}: Error %: {batch_err:.2%}, "
+                    f"NLL: {batch_nll:.4f}, ECE: {batch_ece:.4f}"
+                )
 
     if total_eval == 0:
         # Best effort to read last losses
@@ -404,6 +427,143 @@ def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) ->
         prop = count / confs.numel()
         ece += abs(acc_bin - conf_bin) * prop
     return float(ece)
+
+
+def _build_m2a_method_name() -> str:
+    """Build a descriptive method name for M2A based on masking config."""
+    base = "m2a"
+    try:
+        domain = str(getattr(cfg.M2A, "RANDOM_MASKING", "")).lower()
+    except Exception:
+        domain = ""
+    try:
+        mask_type = str(getattr(cfg.M2A, "MASK_TYPE", "")).lower()
+    except Exception:
+        mask_type = ""
+    parts = [base]
+    if domain:
+        parts.append(domain)
+    if mask_type:
+        parts.append(mask_type)
+    return "_".join(parts)
+
+
+def _unwrap_base_model_for_features(model: torch.nn.Module) -> torch.nn.Module:
+    """Best-effort unwrapping to reach the underlying ViT backbone for feature extraction.
+
+    This function does not change any training/eval modes or optimizer state.
+    """
+    m = model
+    for _ in range(4):
+        if hasattr(m, "model"):
+            m = getattr(m, "model")
+            continue
+        if hasattr(m, "module"):
+            m = getattr(m, "module")
+            continue
+        break
+    return m
+
+
+def _extract_features_and_logits(base_model: torch.nn.Module,
+                                 x_b: torch.Tensor):
+    """Extract CLS features and logits from a ViT-like backbone without adaptation.
+
+    Tries to use forward_features + head/forward_head when available.
+    """
+    core = base_model
+    if hasattr(core, "module"):
+        core = core.module
+
+    feats = None
+    logits = None
+    if hasattr(core, "forward_features"):
+        out = core.forward_features(x_b)
+        feats = out[0] if isinstance(out, tuple) else out
+        if hasattr(core, "forward_head"):
+            logits = core.forward_head(feats)
+        elif hasattr(core, "head") and isinstance(core.head, nn.Module):
+            logits = core.head(feats)
+        else:
+            logits = core(x_b)
+    else:
+        logits = core(x_b)
+        feats = logits
+
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    return feats, logits
+
+
+def save_domain_features(method_name: str,
+                         model: torch.nn.Module,
+                         x: torch.Tensor,
+                         y: torch.Tensor,
+                         severity: int,
+                         corruption_type: str,
+                         batch_size: int,
+                         device: torch.device):
+    """Save per-domain forward features/logits/probabilities/predictions/labels.
+
+    This runs an extra pure forward pass through the underlying ViT backbone
+    and does not modify any adaptation state.
+    """
+    try:
+        base_model = _unwrap_base_model_for_features(model)
+        total = x.shape[0]
+        feat_list = []
+        logit_list = []
+        label_list = []
+
+        with torch.no_grad():
+            for start in range(0, total, batch_size):
+                end = min(start + batch_size, total)
+                x_b = x[start:end].to(device)
+                y_b = y[start:end].to(device)
+                feats_b, logits_b = _extract_features_and_logits(base_model, x_b)
+                feat_list.append(feats_b.detach().cpu())
+                logit_list.append(logits_b.detach().cpu())
+                label_list.append(y_b.detach().cpu())
+
+        if not feat_list:
+            return None
+
+        feats_t = torch.cat(feat_list, dim=0)
+        logits_t = torch.cat(logit_list, dim=0)
+        labels_t = torch.cat(label_list, dim=0)
+        probs_t = logits_t.softmax(dim=1)
+        preds_t = probs_t.argmax(dim=1)
+
+        domain_id = f"{corruption_type}_{severity}"
+        domain_data = {
+            "domain_id": domain_id,
+            "method": method_name,
+            "features": feats_t.numpy(),
+            "logits": logits_t.numpy(),
+            "probabilities": probs_t.numpy(),
+            "predictions": preds_t.numpy(),
+            "labels": labels_t.numpy(),
+        }
+        return domain_data
+    except Exception as e:
+        logger.warning(f"Failed to build features for {corruption_type}{severity}: {e}")
+        return None
+
+
+def save_severity_features(method_name: str,
+                           severity: int,
+                           domains: dict) -> None:
+    try:
+        if not domains:
+            return
+        save_dir = "/flash/project_465002264/projects/m2a/feat"
+        os.makedirs(save_dir, exist_ok=True)
+        filename = f"{method_name}_{severity}.npy"
+        path = os.path.join(save_dir, filename)
+        np.save(path, domains, allow_pickle=True)
+        logger.info(f"Saved features to: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to save severity features for {severity}: {e}")
 
 
 def setup_optimizer(params):

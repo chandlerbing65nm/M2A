@@ -3,6 +3,8 @@ import os
 
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
+import time
 
 from robustbench.data import load_cifar10c
 from robustbench.model_zoo.enums import ThreatModel
@@ -11,6 +13,7 @@ from robustbench.utils import clean_accuracy as accuracy
 from collections import OrderedDict
 
 import torch.nn as nn
+import numpy as np
 from conf import cfg, load_cfg_fom_args
 
 logger = logging.getLogger(__name__)
@@ -64,10 +67,12 @@ def evaluate(description):
     if cfg.MODEL.ADAPTATION == "source":
         logger.info("test-time adaptation: NONE")
         model = setup_source(base_model)
+        method_name = "source"
     if getattr(cfg, "PRINT_MODEL", False):
         return
     All_error = []
     for severity in cfg.CORRUPTION.SEVERITY:
+        severity_domains = {}
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
             if i_c == 0:
                 try:
@@ -82,10 +87,40 @@ def evaluate(description):
                                            [corruption_type])
             x_test = torch.nn.functional.interpolate(x_test, size=(args.size, args.size), \
                 mode='bilinear', align_corners=False)
-            acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device = 'cuda')
-            err = 1. - acc
-            All_error.append(err)
-            logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+
+            if getattr(cfg.TEST, "BATCH_METRICS", False):
+                acc, nll, ece, _, _, _, _, _, _, _, _, _ = compute_metrics(
+                    model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
+                    tag=f"[{corruption_type}{severity}]"
+                )
+                err = 1. - acc
+                All_error.append(err)
+                logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+                logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
+                logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
+            else:
+                acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device='cuda')
+                err = 1. - acc
+                All_error.append(err)
+                logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+
+            if getattr(args, "save_feat", False):
+                domain_data = save_domain_features(
+                    method_name=method_name,
+                    model=model,
+                    x=x_test,
+                    y=y_test,
+                    severity=severity,
+                    corruption_type=corruption_type,
+                    batch_size=cfg.TEST.BATCH_SIZE,
+                    device=device,
+                )
+                if domain_data is not None:
+                    domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
+                    severity_domains[domain_id] = domain_data
+
+        if getattr(args, "save_feat", False):
+            save_severity_features(method_name, severity, severity_domains)
 
     # Save checkpoint after full evaluation if requested
     try:
@@ -112,6 +147,211 @@ def setup_source(model):
     model.eval()
     logger.info(f"model for evaluation: %s", model)
     return model
+
+
+def compute_metrics(model: torch.nn.Module,
+                    x: torch.Tensor,
+                    y: torch.Tensor,
+                    batch_size: int = 100,
+                    device: torch.device = None,
+                    tag: str = ""):
+    if device is None:
+        device = x.device
+    if isinstance(device, str):
+        device = torch.device(device)
+    total_cnt = x.shape[0]
+    n_batches = int((total_cnt + batch_size - 1) // batch_size)
+
+    correct = 0
+    total_eval = 0
+    nll_sum = 0.0
+    max_softmax_sum = 0.0
+    entropy_sum = 0.0
+    cos_sum = 0.0
+    confs_all = []
+    correct_all = []
+    adapt_time_total = 0.0
+    adapt_macs_total = 0
+
+    for i in range(n_batches):
+        lo = i * batch_size
+        hi = min((i + 1) * batch_size, total_cnt)
+        x_b = x[lo:hi].to(device)
+        y_b = y[lo:hi].to(device)
+        t0 = time.time()
+        output = model(x_b)
+        adapt_time_total += (time.time() - t0)
+
+        logits = output if isinstance(output, torch.Tensor) else output[0]
+        preds = logits.argmax(dim=1)
+        correct_batch = (preds == y_b).float().sum().item()
+        total_batch = y_b.shape[0]
+        correct += correct_batch
+        total_eval += total_batch
+        batch_nll_sum = F.cross_entropy(logits, y_b, reduction='sum').item()
+        nll_sum += batch_nll_sum
+        probs = logits.softmax(dim=1)
+        confs = probs.max(dim=1).values
+        ents = -(probs * probs.clamp_min(1e-12).log()).sum(dim=1)
+        one_hot = F.one_hot(y_b.long(), num_classes=logits.shape[-1]).float()
+        cos_b = F.cosine_similarity(probs, one_hot, dim=1)
+        confs_all.append(confs.detach().cpu())
+        correct_all.append((preds == y_b).detach().cpu())
+        max_softmax_sum += float(confs.sum().item())
+        entropy_sum += float(ents.sum().item())
+        cos_sum += float(cos_b.sum().item())
+
+        if getattr(cfg.TEST, "BATCH_METRICS", False):
+            batch_acc = correct_batch / total_batch if total_batch > 0 else 0.0
+            batch_err = 1.0 - batch_acc
+            batch_nll = batch_nll_sum / total_batch if total_batch > 0 else 0.0
+            batch_ece = compute_ece(confs.detach(), (preds == y_b).float().detach())
+            prefix = f"{tag} " if tag else ""
+            logger.info(
+                f"[BATCH_METRICS] {prefix}batch {i}: Error %: {batch_err:.2%}, "
+                f"NLL: {batch_nll:.4f}, ECE: {batch_ece:.4f}"
+            )
+
+    if total_eval == 0:
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, 0.0, 0.0, 0.0
+
+    acc = correct / total_eval
+    nll = nll_sum / total_eval
+    max_softmax = max_softmax_sum / total_eval if total_eval > 0 else 0.0
+    entropy = entropy_sum / total_eval if total_eval > 0 else 0.0
+    cos_sim = cos_sum / total_eval if total_eval > 0 else 0.0
+    confs_all = torch.cat(confs_all) if len(confs_all) else torch.empty(0)
+    correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
+    ece = compute_ece(confs_all, correct_all)
+
+    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, 0.0, 0.0, 0.0
+
+
+def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
+    if confs.numel() == 0:
+        return 0.0
+    ece = 0.0
+    bin_boundaries = torch.linspace(0, 1, steps=n_bins + 1)
+    for i in range(n_bins):
+        lo = bin_boundaries[i]
+        hi = bin_boundaries[i + 1]
+        if i == n_bins - 1:
+            in_bin = (confs >= lo) & (confs <= hi)
+        else:
+            in_bin = (confs >= lo) & (confs < hi)
+        count = in_bin.sum().item()
+        if count == 0:
+            continue
+        conf_bin = confs[in_bin].mean().item()
+        acc_bin = correct[in_bin].mean().item()
+        prop = count / confs.numel()
+        ece += abs(acc_bin - conf_bin) * prop
+    return float(ece)
+
+
+def _unwrap_base_model_for_features(model: torch.nn.Module) -> torch.nn.Module:
+    m = model
+    for _ in range(4):
+        if hasattr(m, "model"):
+            m = getattr(m, "model")
+            continue
+        if hasattr(m, "module"):
+            m = getattr(m, "module")
+            continue
+        break
+    return m
+
+
+def _extract_features_and_logits(base_model: torch.nn.Module,
+                                 x_b: torch.Tensor):
+    core = base_model
+    if hasattr(core, "module"):
+        core = core.module
+
+    feats = None
+    logits = None
+    if hasattr(core, "forward_features"):
+        out = core.forward_features(x_b)
+        feats = out[0] if isinstance(out, tuple) else out
+        if hasattr(core, "forward_head"):
+            logits = core.forward_head(feats)
+        elif hasattr(core, "head") and isinstance(core.head, nn.Module):
+            logits = core.head(feats)
+        else:
+            logits = core(x_b)
+    else:
+        logits = core(x_b)
+        feats = logits
+
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    return feats, logits
+
+
+def save_domain_features(method_name: str,
+                         model: torch.nn.Module,
+                         x: torch.Tensor,
+                         y: torch.Tensor,
+                         severity: int,
+                         corruption_type: str,
+                         batch_size: int,
+                         device: torch.device):
+    try:
+        base_model = _unwrap_base_model_for_features(model)
+        total = x.shape[0]
+        feat_list = []
+        logit_list = []
+        label_list = []
+
+        with torch.no_grad():
+            for start in range(0, total, batch_size):
+                end = min(start + batch_size, total)
+                x_b = x[start:end].to(device)
+                y_b = y[start:end].to(device)
+                feats_b, logits_b = _extract_features_and_logits(base_model, x_b)
+                feat_list.append(feats_b.detach().cpu())
+                logit_list.append(logits_b.detach().cpu())
+                label_list.append(y_b.detach().cpu())
+
+        if not feat_list:
+            return None
+
+        feats_t = torch.cat(feat_list, dim=0)
+        logits_t = torch.cat(logit_list, dim=0)
+        labels_t = torch.cat(label_list, dim=0)
+        probs_t = logits_t.softmax(dim=1)
+        preds_t = probs_t.argmax(dim=1)
+
+        domain_id = f"{corruption_type}_{severity}"
+        domain_data = {
+            "domain_id": domain_id,
+            "method": method_name,
+            "features": feats_t.numpy(),
+            "logits": logits_t.numpy(),
+            "probabilities": probs_t.numpy(),
+            "predictions": preds_t.numpy(),
+            "labels": labels_t.numpy(),
+        }
+        return domain_data
+    except Exception as e:
+        logger.warning(f"Failed to build features for {corruption_type}{severity}: {e}")
+        return None
+
+
+def save_severity_features(method_name: str,
+                           severity: int,
+                           domains: dict) -> None:
+    try:
+        if not domains:
+            return
+        save_dir = "/flash/project_465002264/projects/m2a/feat"
+        os.makedirs(save_dir, exist_ok=True)
+        filename = f"{method_name}_{severity}.npy"
+        path = os.path.join(save_dir, filename)
+        np.save(path, domains, allow_pickle=True)
+        logger.info(f"Saved features to: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to save severity features for {severity}: {e}")
 
 def setup_optimizer(params):
     """Set up optimizer for tent adaptation.
@@ -140,4 +380,4 @@ def setup_optimizer(params):
         raise NotImplementedError
 
 if __name__ == '__main__':
-    evaluate('"CIFAR-10-C evaluation.')
+    evaluate('CIFAR-10-C evaluation.')
