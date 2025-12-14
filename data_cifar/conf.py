@@ -109,6 +109,7 @@ _C.TEST = CfgNode()
 # Batch size for evaluation (and updates for norm + tent)
 _C.TEST.BATCH_SIZE = 128
 _C.TEST.BATCH_METRICS = False
+_C.TEST.DOMAIN_GEN = False
 
 # --------------------------------- CUDNN options --------------------------- #
 _C.CUDNN = CfgNode()
@@ -275,6 +276,8 @@ def load_cfg_fom_args(description="Config options."):
                         help="If set, only print model/params/optimizer and exit before evaluation")
     parser.add_argument("--batch_metrics", action="store_true",
                         help="If set, compute and log metrics per batch with fixed batch size 20")
+    parser.add_argument("--domain_gen", action="store_true",
+                        help="Enable domain generalization mode: adapt on first 10 corruptions, then evaluate only on remaining 5 (no further adaptation)")
 
     # M2A (CTTA) optimization CLI options
     parser.add_argument("--steps", type=int, default=None,
@@ -365,6 +368,7 @@ def load_cfg_fom_args(description="Config options."):
     cfg.TEST.BATCH_METRICS = bool(getattr(args, "batch_metrics", False))
     if cfg.TEST.BATCH_METRICS:
         cfg.TEST.BATCH_SIZE = 20
+    cfg.TEST.DOMAIN_GEN = bool(getattr(args, "domain_gen", False))
     # Map CLI seed to config if provided; otherwise keep YAML/default
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)

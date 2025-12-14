@@ -100,18 +100,21 @@ def evaluate(description):
     for severity in cfg.CORRUPTION.SEVERITY:
         severity_domains = {}
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            if i_c == 0:
-                try:
-                    if hasattr(model, 'reset'):
-                        model.reset()
+            domain_gen = bool(getattr(cfg.TEST, "DOMAIN_GEN", False))
+            no_adapt_this = domain_gen and (i_c >= 10)
+            if not no_adapt_this:
+                if i_c == 0:
+                    try:
+                        if hasattr(model, 'reset'):
+                            model.reset()
+                            logger.info("")
+                            logger.info("resetting model")
+                    except Exception:
                         logger.info("")
-                        logger.info("resetting model")
-                except Exception:
+                        logger.warning("not resetting model")
+                else:
                     logger.info("")
                     logger.warning("not resetting model")
-            else:
-                logger.info("")
-                logger.warning("not resetting model")
             x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
@@ -129,7 +132,7 @@ def evaluate(description):
                     pass
             metrics = compute_metrics(
                 model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
-                tag=f"[{corruption_type}{severity}]"
+                tag=f"[{corruption_type}{severity}]", no_adapt=bool(no_adapt_this)
             )
             acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = metrics
             err = 1. - acc
@@ -225,7 +228,8 @@ def compute_metrics(model: nn.Module,
                     y: torch.Tensor,
                     batch_size: int = 100,
                     device: torch.device = None,
-                    tag: str = ""):
+                    tag: str = "",
+                    no_adapt: bool = False):
     """Compute ACC, NLL, ECE, mean Max-Softmax, mean Entropy, mean cosine(pred_softmax, target_onehot)
     and accumulate adaptation timing/MACs during M2A CTTA.
     Returns (acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last)
@@ -312,17 +316,22 @@ def compute_metrics(model: nn.Module,
             y_b_full = y_b_full.to(device)
 
             # Single prediction pass (may adapt internally)
-            t0 = time.time()
-            output = model(x_b_full)
-            adapt_time_total += (time.time() - t0)
-            stats_src = model.module if hasattr(model, 'module') else model
-            # Count MACs for entire batch
-            per_img_macs = estimate_vit_macs_per_image(stats_src, img_size=x_b_full.shape[-1])
-            adapt_macs_total += per_img_macs * int(x_b_full.shape[0])
-            y_eval = y_b_full
-
-            # Handle outputs (logits)
-            logits = output
+            if not no_adapt:
+                t0 = time.time()
+                output = model(x_b_full)
+                adapt_time_total += (time.time() - t0)
+                stats_src = model.module if hasattr(model, 'module') else model
+                # Count MACs for entire batch
+                per_img_macs = estimate_vit_macs_per_image(stats_src, img_size=x_b_full.shape[-1])
+                adapt_macs_total += per_img_macs * int(x_b_full.shape[0])
+                y_eval = y_b_full
+                # Handle outputs (logits)
+                logits = output
+            else:
+                # bypass adaptation: use underlying base model forward only
+                base_core = _unwrap_base_model_for_features(model)
+                _feats, logits = _extract_features_and_logits(base_core, x_b_full)
+                y_eval = y_b_full
             preds = logits.argmax(dim=1)
             correct_batch = (preds == y_eval).float().sum().item()
             total_batch = y_eval.shape[0]

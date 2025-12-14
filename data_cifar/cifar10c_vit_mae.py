@@ -99,14 +99,17 @@ def evaluate(description):
     for severity in cfg.CORRUPTION.SEVERITY:
         severity_domains = {}
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            if i_c == 0:
-                try:
-                    model.reset()
-                    logger.info("resetting model")
-                except:
+            domain_gen = bool(getattr(cfg.TEST, "DOMAIN_GEN", False))
+            no_adapt_this = domain_gen and (i_c >= 10)
+            if not no_adapt_this:
+                if i_c == 0:
+                    try:
+                        model.reset()
+                        logger.info("resetting model")
+                    except:
+                        logger.warning("not resetting model")
+                else:
                     logger.warning("not resetting model")
-            else:
-                logger.warning("not resetting model")
             x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
                                            severity, cfg.DATA_DIR, False,
                                            [corruption_type])
@@ -121,7 +124,7 @@ def evaluate(description):
 
             acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = compute_metrics(
                 model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
-                tag=f"[{corruption_type}{severity}]"
+                tag=f"[{corruption_type}{severity}]", no_adapt=bool(no_adapt_this)
             )
             err = 1. - acc
             All_error.append(err)
@@ -222,7 +225,8 @@ def compute_metrics(model: torch.nn.Module,
                     y: torch.Tensor,
                     batch_size: int = 100,
                     device: torch.device = None,
-                    tag: str = ""):
+                    tag: str = "",
+                    no_adapt: bool = False):
     if device is None:
         device = x.device
     if isinstance(device, str):
@@ -275,19 +279,33 @@ def compute_metrics(model: torch.nn.Module,
         except Exception:
             return 0
 
-    per_img_macs = estimate_vit_macs_per_image(model, img_size=x.shape[-1])
+    per_img_macs = 0 if no_adapt else estimate_vit_macs_per_image(model, img_size=x.shape[-1])
 
     for i in range(n_batches):
         lo = i * batch_size
         hi = min((i + 1) * batch_size, total_cnt)
         x_b = x[lo:hi].to(device)
         y_b = y[lo:hi].to(device)
-        t0 = time.time()
-        output = model(x_b)
-        adapt_time_total += (time.time() - t0)
-        adapt_macs_total += per_img_macs * int(x_b.shape[0])
-
-        logits = output if isinstance(output, torch.Tensor) else output[0]
+        if not no_adapt:
+            t0 = time.time()
+            output = model(x_b)
+            adapt_time_total += (time.time() - t0)
+            adapt_macs_total += per_img_macs * int(x_b.shape[0])
+            logits = output if isinstance(output, torch.Tensor) else output[0]
+        else:
+            # bypass adaptation: use underlying ViT backbone only
+            core = unwrap_model(model)
+            if hasattr(core, 'forward_features'):
+                out = core.forward_features(x_b)
+                feats = out[0] if isinstance(out, (tuple, list)) else out
+                if hasattr(core, 'forward_head'):
+                    logits = core.forward_head(feats)
+                elif hasattr(core, 'head') and isinstance(core.head, torch.nn.Module):
+                    logits = core.head(feats)
+                else:
+                    logits = core(x_b)
+            else:
+                logits = core(x_b)
         preds = logits.argmax(dim=1)
         correct_batch = (preds == y_b).float().sum().item()
         total_batch = y_b.shape[0]
