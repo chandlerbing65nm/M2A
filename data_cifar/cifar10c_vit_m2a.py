@@ -625,7 +625,24 @@ def save_severity_features(method_name: str,
             return
         save_dir = "/flash/project_465002264/projects/m2a/feat"
         os.makedirs(save_dir, exist_ok=True)
-        filename = f"{method_name}_{severity}.npy"
+        # Filename format: (method)_(random_masking)_(dummy).npy
+        # method: fixed 'm2a'; random_masking: cfg.M2A.RANDOM_MASKING
+        # dummy: 'disable_eml' if cfg.M2A.DISABLE_EML, else 'disable_mcl' if cfg.M2A.DISABLE_MCL, else omitted
+        method_tag = "m2a"
+        try:
+            rm_tag = str(getattr(cfg.M2A, "RANDOM_MASKING", "")).lower()
+        except Exception:
+            rm_tag = ""
+        dummy = ""
+        try:
+            if bool(getattr(cfg.M2A, "DISABLE_EML", False)):
+                dummy = "disable_eml"
+            elif bool(getattr(cfg.M2A, "DISABLE_MCL", False)):
+                dummy = "disable_mcl"
+        except Exception:
+            dummy = ""
+        name_parts = [p for p in [method_tag, rm_tag, dummy] if p]
+        filename = f"{'_'.join(name_parts)}.npy"
         path = os.path.join(save_dir, filename)
         np.save(path, domains, allow_pickle=True)
         logger.info(f"Saved features to: {path}")

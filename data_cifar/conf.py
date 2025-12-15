@@ -278,6 +278,8 @@ def load_cfg_fom_args(description="Config options."):
                         help="If set, compute and log metrics per batch with fixed batch size 20")
     parser.add_argument("--domain_gen", action="store_true",
                         help="Enable domain generalization mode: adapt on first 10 corruptions, then evaluate only on remaining 5 (no further adaptation)")
+    parser.add_argument("--batch_size", type=int, default=None,
+                        help="Override batch size used for evaluation/adaptation (maps to TEST.BATCH_SIZE)")
 
     # M2A (CTTA) optimization CLI options
     parser.add_argument("--steps", type=int, default=None,
@@ -369,6 +371,11 @@ def load_cfg_fom_args(description="Config options."):
     if cfg.TEST.BATCH_METRICS:
         cfg.TEST.BATCH_SIZE = 20
     cfg.TEST.DOMAIN_GEN = bool(getattr(args, "domain_gen", False))
+    if getattr(args, "batch_size", None) is not None:
+        try:
+            cfg.TEST.BATCH_SIZE = int(args.batch_size)
+        except Exception:
+            pass
     # Map CLI seed to config if provided; otherwise keep YAML/default
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)

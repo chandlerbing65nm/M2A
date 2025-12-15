@@ -41,6 +41,10 @@ VALID_METHODS = {
     "REM",
     "M2A (Spatial)",
     "M2A (Frequency)",
+    # More granular M2A (Spatial) variants (accepted as CLI method names)
+    "M2A (Spatial, EML only)",
+    "M2A (Spatial, MCL only)",
+    "M2A (Spatial, EML+MCL)",
 }
 
 
@@ -215,6 +219,10 @@ def main():
         "REM": "rem",
         "M2A (Spatial)": "m2a_spatial",
         "M2A (Frequency)": "m2a_spectral",
+        # All M2A (Spatial) variants are stored with method token starting "m2a_spatial"
+        "M2A (Spatial, EML only)": "m2a_spatial",
+        "M2A (Spatial, MCL only)": "m2a_spatial",
+        "M2A (Spatial, EML+MCL)": "m2a_spatial",
     }
 
     for npy_path, legend_name in zip(args.npy, methods_canonical):
@@ -263,6 +271,7 @@ def main():
 
     plt.figure(figsize=(10, 5))
 
+    # Use canonical method names directly as legend labels
     for js_vals, legend_name in zip(js_series_list, methods_canonical):
         plt.plot(xs, js_vals, label=legend_name, linewidth=5)
 

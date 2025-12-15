@@ -28,35 +28,35 @@ conda activate m2a
 # python -m cifar10c_vit \
 #      --cfg cfgs/cifar10/source.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --domain_gen \
+#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_tent \
 #      --cfg cfgs/cifar10/tent.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --domain_gen \
+#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_cotta \
 #      --cfg cfgs/cifar10/cotta.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --domain_gen \
+#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_mae\
 #      --cfg cfgs/cifar10/cmae.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --domain_gen \
+#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_rem \
 #      --cfg cfgs/cifar10/rem.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --domain_gen \
+#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 cd /users/doloriel/work/Repo/M2A/data_cifar
@@ -77,5 +77,5 @@ python -m cifar10c_vit_m2a \
      --mcl_distance ce \
      --steps 1 \
      --disable_erl \
-     --domain_gen \
+     --save_feat \
      CORRUPTION.NUM_EX 10000
