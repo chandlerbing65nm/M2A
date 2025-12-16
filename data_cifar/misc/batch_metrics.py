@@ -13,7 +13,18 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 VALID_METRICS = {"Error", "NLL", "ECE"}
-VALID_METHODS = {"Source", "Tent", "CoTTA", "Continual-MAE", "REM", "M2A (Ours)", "M2A (Spatial)", "M2A (Frequency)"}
+VALID_METHODS = {
+    "Source",
+    "Tent",
+    "CoTTA",
+    "Continual-MAE",
+    "REM",
+    "M2A (Ours)",
+    "M2A (Spatial)",
+    "M2A (Frequency)",
+    "M2A (Spatial) + ERL",
+    "M2A (Frequency) + ERL",
+}
 
 
 def parse_batch_metric_series(log_path: str, metric: str) -> List[float]:
@@ -76,7 +87,11 @@ def main():
     parser.add_argument("--metric", required=True, choices=[m.lower() for m in VALID_METRICS],
                         help="Metric to plot: error, nll, or ece")
     parser.add_argument("--method", nargs="+", required=True,
-                        help="Method name per log (Source, Tent, CoTTA, Continual-MAE, REM, M2A (Ours), M2A (Spatial), M2A (Frequency))")
+                        help=(
+                            "Method name per log (Source, Tent, CoTTA, Continual-MAE, REM, "
+                            "M2A (Ours), M2A (Spatial), M2A (Frequency), "
+                            "M2A (Spatial) + ERL, M2A (Frequency) + ERL)"
+                        ))
     parser.add_argument("--out_dir", default="/users/doloriel/work/Repo/M2A/data_cifar/plots/batch_metrics",
                         help="Output directory for plots")
     parser.add_argument("--gap", type=int, default=1,
