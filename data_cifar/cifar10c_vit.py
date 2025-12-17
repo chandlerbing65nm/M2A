@@ -4,7 +4,6 @@ import os
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-import time
 
 from robustbench.data import load_cifar10c
 from robustbench.model_zoo.enums import ThreatModel
@@ -170,17 +169,13 @@ def compute_metrics(model: torch.nn.Module,
     cos_sum = 0.0
     confs_all = []
     correct_all = []
-    adapt_time_total = 0.0
-    adapt_macs_total = 0
 
     for i in range(n_batches):
         lo = i * batch_size
         hi = min((i + 1) * batch_size, total_cnt)
         x_b = x[lo:hi].to(device)
         y_b = y[lo:hi].to(device)
-        t0 = time.time()
         output = model(x_b)
-        adapt_time_total += (time.time() - t0)
 
         logits = output if isinstance(output, torch.Tensor) else output[0]
         preds = logits.argmax(dim=1)
@@ -213,7 +208,7 @@ def compute_metrics(model: torch.nn.Module,
             )
 
     if total_eval == 0:
-        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, 0.0, 0.0, 0.0, 0.0, 0.0
 
     acc = correct / total_eval
     nll = nll_sum / total_eval
@@ -224,7 +219,7 @@ def compute_metrics(model: torch.nn.Module,
     correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
     ece = compute_ece(confs_all, correct_all)
 
-    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, 0.0, 0.0, 0.0
+    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, 0.0, 0.0, 0.0, 0.0, 0.0
 
 
 def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
@@ -404,7 +399,8 @@ def save_severity_features(method_name: str,
             return
         save_dir = "/flash/project_465002264/projects/m2a/feat"
         os.makedirs(save_dir, exist_ok=True)
-        filename = f"{method_name}_{severity}.npy"
+        dataset_tag = "cifar10c"
+        filename = f"{method_name}_{severity}_{dataset_tag}.npy"
         path = os.path.join(save_dir, filename)
         np.save(path, domains, allow_pickle=True)
         logger.info(f"Saved features to: {path}")

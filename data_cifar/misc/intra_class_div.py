@@ -45,6 +45,12 @@ VALID_METHODS = {
     "M2A (Spatial, EML only)",
     "M2A (Spatial, MCL only)",
     "M2A (Spatial, EML+MCL)",
+    # Additional granular M2A variants used in feature naming
+    "M2A (Spatial, Patch)",
+    "M2A (Spatial, Pixel)",
+    "M2A (Frequency, All)",
+    "M2A (Frequency, Low)",
+    "M2A (Frequency, High)",
 }
 
 
@@ -211,6 +217,11 @@ def main():
         help="Output directory for plots (default: data_cifar/plots/divergence).",
     )
     parser.add_argument(
+        "--tag",
+        default="",
+        help="Optional tag to append to the output filename.",
+    )
+    parser.add_argument(
         "--use_what",
         default="class_features_12",
         help="Which blockwise key to use (e.g., class_features_1..N, patch_mean_1..N, patch_std_1..N)",
@@ -240,6 +251,15 @@ def main():
         "M2A (Spatial, EML only)": "m2a_spatial",
         "M2A (Spatial, MCL only)": "m2a_spatial",
         "M2A (Spatial, EML+MCL)": "m2a_spatial",
+        # Granular M2A variants corresponding to specific masking configs.
+        # The underlying features currently store method tokens like
+        # 'm2a_spatial_binary' or 'm2a_spectral_binary', so we only
+        # check the broader spatial/spectral prefix here.
+        "M2A (Spatial, Patch)": "m2a_spatial",
+        "M2A (Spatial, Pixel)": "m2a_spatial",
+        "M2A (Frequency, All)": "m2a_spectral",
+        "M2A (Frequency, Low)": "m2a_spectral",
+        "M2A (Frequency, High)": "m2a_spectral",
     }
 
     first_severity: str = "unknown"
@@ -339,7 +359,8 @@ def main():
     else:
         severity_tag = "mixed"
 
-    outfile = "intra_class_divergence.jpg"
+    tag_suffix = f"_{args.tag}" if getattr(args, "tag", "") else ""
+    outfile = f"intra_class_divergence{tag_suffix}.jpg"
     out_path = os.path.join(args.outdir, outfile)
     plt.tight_layout()
     plt.savefig(out_path, dpi=200)

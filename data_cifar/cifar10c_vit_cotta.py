@@ -5,7 +5,6 @@ import os
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-import time
 
 from robustbench.data import load_cifar10c
 from robustbench.model_zoo.enums import ThreatModel
@@ -43,13 +42,15 @@ def evaluate(description):
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
-    checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
-    if isinstance(checkpoint, dict) and 'model' in checkpoint:
-        base_model.load_state_dict(checkpoint['model'], strict=True)
-    else:
-        base_model.load_state_dict(checkpoint, strict=True)
-    del checkpoint
+    arch_name = str(cfg.MODEL.ARCH).lower()
+    if 'vit' in arch_name:
+        checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
+        checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
+        if isinstance(checkpoint, dict) and 'model' in checkpoint:
+            base_model.load_state_dict(checkpoint['model'], strict=True)
+        else:
+            base_model.load_state_dict(checkpoint, strict=True)
+        del checkpoint
     # Apply potential adaptation checkpoint (optional)
     if cfg.TEST.ckpt is not None:
         if device.type == 'cuda':
@@ -222,8 +223,6 @@ def compute_metrics(model: torch.nn.Module,
     cos_sum = 0.0
     confs_all = []
     correct_all = []
-    adapt_time_total = 0.0
-    adapt_macs_total = 0
 
     def unwrap_model(m):
         try:
@@ -238,39 +237,13 @@ def compute_metrics(model: torch.nn.Module,
             pass
         return m
 
-    def estimate_vit_macs_per_image(stats_src, img_size: int) -> int:
-        try:
-            m = unwrap_model(stats_src)
-            if hasattr(m, 'patch_embed') and hasattr(m.patch_embed, 'proj'):
-                ps = m.patch_embed.proj.kernel_size[0]
-                seq = (img_size // ps) ** 2 + 1
-            else:
-                ps = 16
-                seq = (img_size // ps) ** 2 + 1
-            heads = getattr(getattr(m, 'blocks', [None])[0], 'attn', None)
-            num_heads = getattr(heads, 'num_heads', 12) if heads is not None else 12
-            d_model = getattr(m, 'embed_dim', 768)
-            attn_cost = 2 * (seq ** 2) * num_heads
-            proj_cost = 3 * seq * d_model * d_model
-            mlp_cost = 2 * seq * d_model * (4 * d_model)
-            blocks = len(getattr(m, 'blocks', [])) or 12
-            total = blocks * (attn_cost + proj_cost + mlp_cost)
-            return int(total)
-        except Exception:
-            return 0
-
-    per_img_macs = 0 if no_adapt else estimate_vit_macs_per_image(model, img_size=x.shape[-1])
-
     for i in range(n_batches):
         lo = i * batch_size
         hi = min((i + 1) * batch_size, total_cnt)
         x_b = x[lo:hi].to(device)
         y_b = y[lo:hi].to(device)
         if not no_adapt:
-            t0 = time.time()
             output = model(x_b)
-            adapt_time_total += (time.time() - t0)
-            adapt_macs_total += per_img_macs * int(x_b.shape[0])
             logits = output if isinstance(output, torch.Tensor) else output[0]
         else:
             base_core = _unwrap_base_model_for_features(model)
@@ -314,7 +287,7 @@ def compute_metrics(model: torch.nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, 0.0, 0.0, mcl_last, erl_last, eml_last
 
     acc = correct / total_eval
     nll = nll_sum / total_eval
@@ -349,7 +322,7 @@ def compute_metrics(model: torch.nn.Module,
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
 
-    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, 0.0, 0.0, mcl_last, erl_last, eml_last
 
 
 def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
@@ -542,7 +515,8 @@ def save_severity_features(method_name: str,
             return
         save_dir = "/flash/project_465002264/projects/m2a/feat"
         os.makedirs(save_dir, exist_ok=True)
-        filename = f"{method_name}_{severity}.npy"
+        dataset_tag = "cifar10c"
+        filename = f"{method_name}_{severity}_{dataset_tag}.npy"
         path = os.path.join(save_dir, filename)
         np.save(path, domains, allow_pickle=True)
         logger.info(f"Saved features to: {path}")

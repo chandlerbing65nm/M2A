@@ -1,17 +1,17 @@
 MODEL:
-  ADAPTATION: REM
-  ARCH: Standard_VITB_REM   # VIT: Standard_VITB  CNN: Standard
+  ADAPTATION: cotta
+  ARCH: Standard
 TEST:
-  BATCH_SIZE: 20
+  BATCH_SIZE: 200
 CORRUPTION:
-  DATASET: avffia
+  DATASET: cifar10
   SEVERITY:
     - 5
   TYPE:
     - gaussian_noise
     - shot_noise
     - impulse_noise
-    - defocus_blur 
+    - defocus_blur
     - glass_blur
     - motion_blur
     - zoom_blur
@@ -28,10 +28,7 @@ OPTIM:
   STEPS: 1
   BETA: 0.9
   LR: 1e-3
-  WD: 0.0
-  M: 0.1
-  N: 3
-  LAMB: 1.0
-  MARGIN: 0.0
-
-block_size: 16
+  WD: 0.
+  MT: 0.999
+  RST: 0.01
+  AP: 0.92

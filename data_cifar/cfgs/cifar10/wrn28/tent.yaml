@@ -1,17 +1,17 @@
 MODEL:
-  ADAPTATION: source
-  ARCH: Standard_VITB
+  ADAPTATION: tent
+  ARCH: Standard
 TEST:
-  BATCH_SIZE: 4
+  BATCH_SIZE: 200
 CORRUPTION:
-  DATASET: avffia
+  DATASET: cifar10
   SEVERITY:
     - 5
   TYPE:
     - gaussian_noise
     - shot_noise
     - impulse_noise
-    - defocus_blur 
+    - defocus_blur
     - glass_blur
     - motion_blur
     - zoom_blur
@@ -23,3 +23,9 @@ CORRUPTION:
     - elastic_transform
     - pixelate
     - jpeg_compression
+OPTIM:
+  METHOD: Adam
+  STEPS: 1
+  BETA: 0.9
+  LR: 1e-3
+  WD: 0.

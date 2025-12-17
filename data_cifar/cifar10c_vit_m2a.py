@@ -1,5 +1,4 @@
 import logging
-import time
 import os
 from contextlib import nullcontext
 from collections import OrderedDict
@@ -45,13 +44,15 @@ def evaluate(description):
     # configure model
     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR,
                        cfg.CORRUPTION.DATASET, ThreatModel.corruptions)
-    checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
-    checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
-    if isinstance(checkpoint, dict) and 'model' in checkpoint:
-        base_model.load_state_dict(checkpoint['model'], strict=True)
-    else:
-        base_model.load_state_dict(checkpoint, strict=True)
-    del checkpoint
+    arch_name = str(cfg.MODEL.ARCH).lower()
+    if 'vit' in arch_name:
+        checkpoint = torch.load("/users/doloriel/work/Repo/M2A/ckpt/vit_base_384_cifar10.t7", map_location='cpu')
+        checkpoint = rm_substr_from_state_dict(checkpoint['model'], 'module.') if isinstance(checkpoint, dict) else checkpoint
+        if isinstance(checkpoint, dict) and 'model' in checkpoint:
+            base_model.load_state_dict(checkpoint['model'], strict=True)
+        else:
+            base_model.load_state_dict(checkpoint, strict=True)
+        del checkpoint
     # Apply potential adaptation checkpoint (optional)
     if cfg.TEST.ckpt is not None:
         if device.type == 'cuda':
@@ -81,22 +82,6 @@ def evaluate(description):
 
     # evaluate on each severity and type of corruption in turn
     all_error = []
-    accs_so_far = []  # for domain shift robustness
-    prev_x = None
-    prev_y = None
-    prev_acc_at_time = None
-
-    # Helper: format large numbers in base-10 scientific notation
-    def fmt_sci(n: int) -> str:
-        try:
-            if n == 0:
-                return "0"
-            import math
-            exp = int(math.floor(math.log10(abs(float(n)))))
-            mant = float(n) / (10 ** exp)
-            return f"{mant:.3f} x 10^{exp}"
-        except Exception:
-            return str(n)
     for severity in cfg.CORRUPTION.SEVERITY:
         severity_domains = {}
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
@@ -146,12 +131,6 @@ def evaluate(description):
             logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
             logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
             logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
-            # New metrics per corruption (averaged per corruption)
-            # - Adaptation Time (s): total wall-clock time spent adapting; lower is better
-            # - Adaptation MACs: total MACs for adapted samples; lower is better
-            # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
-            # logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
-
             if getattr(args, "save_feat", False):
                 domain_data = save_domain_features(
                     method_name=method_name,
@@ -166,19 +145,6 @@ def evaluate(description):
                 if domain_data is not None:
                     domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
                     severity_domains[domain_id] = domain_data
-
-            # Domain Shift Robustness: std of accuracies across types so far (lower is better)
-            accs_so_far.append(acc)
-            if len(accs_so_far) >= 2:
-                import math
-                mean_acc = sum(accs_so_far) / float(len(accs_so_far))
-                var_acc = sum((a - mean_acc) ** 2 for a in accs_so_far) / float(len(accs_so_far))
-                dsr = math.sqrt(var_acc)
-            else:
-                dsr = 0.0
-            # logger.info(f"Domain Shift Robustness (std, lower is better) up to [{corruption_type}{severity}]: {dsr:.4f}")
-            # Update previous corruption cache for next iteration
-            prev_x, prev_y, prev_acc_at_time = x_test, y_test, acc
 
         if getattr(args, "save_feat", False):
             save_severity_features(method_name, severity, severity_domains)
@@ -201,7 +167,31 @@ def evaluate(description):
                         disable_tag += '_disable_eml'
                 except Exception:
                     pass
+
+            # Default filename (backwards-compatible)
             filename = f"{method}_{arch_tag}{mask_tag}{disable_tag}_{dataset_tag}.pth"
+
+            # Special naming for M2A when using random masking and both MCL/EML enabled
+            if method == 'm2a':
+                try:
+                    rm = str(getattr(args, 'random_masking', None) or getattr(cfg.M2A, 'RANDOM_MASKING', None) or '').lower()
+                    disable_mcl = bool(getattr(cfg.M2A, 'DISABLE_MCL', False))
+                    disable_eml = bool(getattr(cfg.M2A, 'DISABLE_EML', False))
+                    if rm in ('spatial', 'spectral') and (not disable_mcl) and (not disable_eml):
+                        if rm == 'spatial':
+                            domain = str(getattr(args, 'spatial_type', None) or getattr(cfg.M2A, 'SPATIAL_TYPE', '')).lower()
+                        else:
+                            domain = str(getattr(args, 'spectral_type', None) or getattr(cfg.M2A, 'SPECTRAL_TYPE', '')).lower()
+                        arch_tag_special = 'vitb16'
+                        parts = [method, arch_tag_special, rm]
+                        if domain:
+                            parts.append(domain)
+                        parts.append(dataset_tag)
+                        filename = f"{'_'.join(parts)}.pth"
+                except Exception:
+                    # Fall back to the default filename on any error
+                    pass
+
             path = os.path.join(ckpt_dir, filename)
             save_model = model
             if hasattr(save_model, 'model'):
@@ -252,58 +242,6 @@ def compute_metrics(model: nn.Module,
     total_cnt = x.shape[0]
     cos_sum = 0.0
 
-    # Adaptation timing and MACs accumulators (averaged per corruption outside)
-    adapt_time_total = 0.0
-    adapt_macs_total = 0
-
-    # Estimate per-image MACs for ViT-like models
-    def estimate_vit_macs_per_image(stats_src, img_size: int) -> int:
-        try:
-            m = stats_src
-            # Unwrap M2A and DataParallel to reach underlying ViT
-            if hasattr(m, 'module'):
-                m = m.module
-            if hasattr(m, 'model'):
-                m = m.model
-            if hasattr(m, 'module'):
-                m = m.module
-            # Extract key attributes
-            # Patch size from conv proj
-            pe = m.patch_embed
-            if hasattr(pe, 'inner'):
-                pe_inner = pe.inner
-            else:
-                pe_inner = pe
-            ps = pe_inner.proj.weight.shape[2]
-            D = getattr(m, 'embed_dim', m.head.in_features)
-            depth = len(m.blocks)
-            # heads from first block
-            h = m.blocks[0].attn.num_heads
-            # mlp ratio from first block
-            D_m = m.blocks[0].mlp.fc1.out_features
-            mlp_ratio = float(D_m) / float(D)
-            # tokens length
-            Ph = img_size // ps
-            Pw = img_size // ps
-            L = 1 + (Ph * Pw)
-            C_in = pe_inner.proj.weight.shape[1]
-            # MACs: Patch embedding conv
-            macs_patch = (Ph * Pw) * (C_in * D * ps * ps)
-            # Per-block MACs
-            # QKV: 3 * L * D * D
-            # Attn: 2 * L * L * D (QK^T and AV)
-            # Out proj: L * D * D
-            # MLP: 2 * L * D * (mlp_ratio * D)
-            per_block = (3 * L * D * D) + (2 * L * L * D) + (L * D * D) + (2 * L * D * int(mlp_ratio * D))
-            macs_blocks = depth * per_block
-            # Head
-            num_classes = m.head.out_features if hasattr(m.head, 'out_features') else 1000
-            macs_head = D * num_classes
-            total = macs_patch + macs_blocks + macs_head
-            return int(total)
-        except Exception:
-            return 0
-
     with torch.no_grad():
         for b in range(n_batches):
             start = b * batch_size
@@ -317,13 +255,7 @@ def compute_metrics(model: nn.Module,
 
             # Single prediction pass (may adapt internally)
             if not no_adapt:
-                t0 = time.time()
                 output = model(x_b_full)
-                adapt_time_total += (time.time() - t0)
-                stats_src = model.module if hasattr(model, 'module') else model
-                # Count MACs for entire batch
-                per_img_macs = estimate_vit_macs_per_image(stats_src, img_size=x_b_full.shape[-1])
-                adapt_macs_total += per_img_macs * int(x_b_full.shape[0])
                 y_eval = y_b_full
                 # Handle outputs (logits)
                 logits = output
@@ -374,7 +306,7 @@ def compute_metrics(model: nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, 0.0, 0.0, mcl_last, erl_last, eml_last
 
     acc = correct / total_eval
     nll = nll_sum / total_eval
@@ -409,7 +341,7 @@ def compute_metrics(model: nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, 0.0, 0.0, mcl_last, erl_last, eml_last
 
 
 def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
@@ -625,24 +557,33 @@ def save_severity_features(method_name: str,
             return
         save_dir = "/flash/project_465002264/projects/m2a/feat"
         os.makedirs(save_dir, exist_ok=True)
-        # Filename format: (method)_(random_masking)_(dummy).npy
-        # method: fixed 'm2a'; random_masking: cfg.M2A.RANDOM_MASKING
-        # dummy: 'disable_eml' if cfg.M2A.DISABLE_EML, else 'disable_mcl' if cfg.M2A.DISABLE_MCL, else omitted
-        method_tag = "m2a"
-        try:
-            rm_tag = str(getattr(cfg.M2A, "RANDOM_MASKING", "")).lower()
-        except Exception:
-            rm_tag = ""
-        dummy = ""
-        try:
-            if bool(getattr(cfg.M2A, "DISABLE_EML", False)):
-                dummy = "disable_eml"
-            elif bool(getattr(cfg.M2A, "DISABLE_MCL", False)):
-                dummy = "disable_mcl"
-        except Exception:
-            dummy = ""
-        name_parts = [p for p in [method_tag, rm_tag, dummy] if p]
-        filename = f"{'_'.join(name_parts)}.npy"
+        dataset_tag = "cifar10c"
+        # Default filename: (method)_(severity)_(dataset).npy
+        method_core = str(getattr(cfg.MODEL, "ADAPTATION", method_name)).lower()
+        method_tag = method_name
+        filename = f"{method_tag}_{severity}_{dataset_tag}.npy"
+
+        # Special naming for M2A when using random masking and both MCL/EML enabled
+        if method_core == "m2a":
+            try:
+                rm = str(getattr(cfg.M2A, "RANDOM_MASKING", "") or "").lower()
+                disable_mcl = bool(getattr(cfg.M2A, "DISABLE_MCL", False))
+                disable_eml = bool(getattr(cfg.M2A, "DISABLE_EML", False))
+                if rm in ("spatial", "spectral") and (not disable_mcl) and (not disable_eml):
+                    if rm == "spatial":
+                        domain = str(getattr(cfg.M2A, "SPATIAL_TYPE", "") or "").lower()
+                    else:
+                        domain = str(getattr(cfg.M2A, "SPECTRAL_TYPE", "") or "").lower()
+                    method_tag_special = "m2a"
+                    parts = [method_tag_special, rm]
+                    if domain:
+                        parts.append(domain)
+                    parts.append(str(severity))
+                    parts.append(dataset_tag)
+                    filename = f"{'_'.join(parts)}.npy"
+            except Exception:
+                # Fall back to the default filename on any error
+                pass
         path = os.path.join(save_dir, filename)
         np.save(path, domains, allow_pickle=True)
         logger.info(f"Saved features to: {path}")

@@ -105,6 +105,8 @@ _C.TEST = CfgNode()
 
 # Batch size for evaluation (and updates for norm + tent)
 _C.TEST.BATCH_SIZE = 128
+_C.TEST.BATCH_METRICS = False
+_C.TEST.DOMAIN_GEN = False
 
 # --------------------------------- CUDNN options --------------------------- #
 _C.CUDNN = CfgNode()
@@ -250,6 +252,18 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--lr", type=float, default=None,
                         help="Optimizer learning rate for test-time adaptation. Overrides OPTIM.LR if provided.")
 
+    # M2A (and related CTTA) optimization CLI options
+    parser.add_argument("--steps", type=int, default=None,
+                        help="Number of adaptation updates per batch (maps to OPTIM.STEPS)")
+    parser.add_argument("--m", type=float, default=None,
+                        help="Masking increment per level in [0,1] (maps to OPTIM.M)")
+    parser.add_argument("--n", type=int, default=None,
+                        help="Number of masking levels (maps to OPTIM.N)")
+    parser.add_argument("--lamb", type=float, default=None,
+                        help="Lambda for entropy-ordering loss (maps to OPTIM.LAMB)")
+    parser.add_argument("--margin", type=float, default=None,
+                        help="Margin multiplier in entropy-ordering loss (maps to OPTIM.MARGIN)")
+
     parser.add_argument("--use_hog", action="store_true",
                     help="if use hog")
     parser.add_argument("--hog_ratio", type=float,
@@ -258,6 +272,14 @@ def load_cfg_fom_args(description="Config options."):
                         help="If set, save a checkpoint of the adapted model at the end of evaluation")
     parser.add_argument("--print_model", action="store_true",
                         help="Print only model/parameter/optimizer info and exit before evaluation.")
+    parser.add_argument("--save_feat", action="store_true",
+                        help="If set, save per-corruption forward features/logits/probabilities/predictions/labels")
+    parser.add_argument("--batch_metrics", action="store_true",
+                        help="If set, compute and log metrics per batch (Error, NLL, ECE)")
+    parser.add_argument("--domain_gen", action="store_true",
+                        help="Enable domain generalization mode: adapt on first 10 corruptions, then evaluate only on remaining 5 (no further adaptation)")
+    parser.add_argument("--recur", type=int, default=1,
+                        help="Number of full passes over all corruptions and severities during evaluation.")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -273,6 +295,12 @@ def load_cfg_fom_args(description="Config options."):
     cfg.use_hog = args.use_hog
     cfg.hog_ratio = args.hog_ratio
     cfg.PRINT_MODEL = bool(getattr(args, "print_model", False))
+
+    # Batch metrics and domain generalization flags
+    cfg.TEST.BATCH_METRICS = bool(getattr(args, "batch_metrics", False))
+    if cfg.TEST.BATCH_METRICS:
+        cfg.TEST.BATCH_SIZE = 20
+    cfg.TEST.DOMAIN_GEN = bool(getattr(args, "domain_gen", False))
 
     if args.seed is not None:
         cfg.RNG_SEED = int(args.seed)
@@ -309,6 +337,18 @@ def load_cfg_fom_args(description="Config options."):
         except Exception:
             pass
         cfg.OPTIM.LR = float(args.lr)
+
+    # Populate OPTIM from CLI if provided
+    if args.steps is not None:
+        cfg.OPTIM.STEPS = args.steps
+    if args.m is not None:
+        cfg.OPTIM.M = args.m
+    if args.n is not None:
+        cfg.OPTIM.N = args.n
+    if args.lamb is not None:
+        cfg.OPTIM.LAMB = args.lamb
+    if args.margin is not None:
+        cfg.OPTIM.MARGIN = args.margin
 
     log_dest = os.path.basename(args.cfg_file)
     log_dest = log_dest.replace('.yaml', '_{}.txt'.format(current_time))

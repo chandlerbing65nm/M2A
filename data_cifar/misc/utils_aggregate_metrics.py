@@ -124,7 +124,7 @@ def fmt_std(v: float, decimals: int = 2) -> str:
     return f"{v:.{decimals}f}"
 
 
-def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dict[str, List[str]], per_log_vals: Dict[str, Dict[str, List[float]]], selected_metric=None):
+def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dict[str, List[str]], per_log_vals: Dict[str, Dict[str, List[float]]], selected_metric=None, avg_type: str = "per_log"):
     order = [
         "Error",
         "NLL",
@@ -157,7 +157,7 @@ def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dic
             else:
                 m_str = fmt_mean(m)
                 s_str = fmt_std(s)
-            print(f"  {corr:>28}: count={c:2d}, mean={m_str} ({s_str})")
+            print(f"  {corr:>28}: count={c:2d}, mean= {m_str} ({s_str})")
             if m == m:
                 means_for_overall.append(m)
         if means_for_overall:
@@ -175,42 +175,94 @@ def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dic
         else:
             om = fmt_mean(overall_mean)
             os = fmt_std(overall_std)
-        print(f"  {'Overall (across corruptions)':>28}: mean={om} ({os})")
+        print(f"  {'Overall (across corruptions)':>28}: mean= {om} ({os})")
 
-        # Overall across logs: compute per-log mean/std across corruptions, then average these across logs
-        log_series = per_log_vals.get(metric, {})
-        per_log_means: List[float] = []
-        per_log_stds: List[float] = []
-        for lp, vals in log_series.items():
-            conv_vals = convert_units({"_": vals}, metric)["_"]
-            if not conv_vals:
+        if avg_type == "per_log":
+            # Overall across logs: compute per-log mean/std across corruptions, then average these across logs
+            log_series = per_log_vals.get(metric, {})
+            per_log_means: List[float] = []
+            per_log_stds: List[float] = []
+            for lp, vals in log_series.items():
+                conv_vals = convert_units({"_": vals}, metric)["_"]
+                if not conv_vals:
+                    continue
+                per_log_means.append(float(mean(conv_vals)))
+                s_val = float(stdev(conv_vals)) if len(conv_vals) > 1 else float("nan")
+                per_log_stds.append(s_val)
+            if per_log_means:
+                overall_mean_logs = float(mean(per_log_means))
+                overall_std_logs = float(stdev(per_log_means)) if len(per_log_means) > 1 else float("nan")
+            else:
+                overall_mean_logs = float("nan")
+                overall_std_logs = float("nan")
+
+            if metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
+                om_logs = fmt_mean(overall_mean_logs) + "%"
+                os_logs = fmt_std(overall_std_logs) + "%"
+            elif metric == "Adaptation MACs":
+                om_logs = f"{overall_mean_logs:.6g}" if overall_mean_logs == overall_mean_logs else "nan"
+                os_logs = f"{overall_std_logs:.6g}" if overall_std_logs == overall_std_logs else "nan"
+            else:
+                om_logs = fmt_mean(overall_mean_logs)
+                os_logs = fmt_std(overall_std_logs)
+            print(f"  {'Overall (across logs)':>28}: mean= {om_logs} ({os_logs})")
+        elif avg_type == "per_count":
+            # Per-count: for each count index, average across corruptions
+            max_count = 0
+            for vs in values_by_corr.values():
+                if len(vs) > max_count:
+                    max_count = len(vs)
+            if max_count == 0:
                 continue
-            per_log_means.append(float(mean(conv_vals)))
-            s_val = float(stdev(conv_vals)) if len(conv_vals) > 1 else float("nan")
-            per_log_stds.append(s_val)
-        if per_log_means:
-            overall_mean_logs = float(mean(per_log_means))
-            overall_std_logs = float(stdev(per_log_means)) if len(per_log_means) > 1 else float("nan")
-        else:
-            overall_mean_logs = float("nan")
-            overall_std_logs = float("nan")
+            per_count_means: List[float] = []
+            print(f"  {'Per-count (across corruptions)':>28}:")
+            for idx in range(max_count):
+                vals_idx: List[float] = []
+                for corr, vs in values_by_corr.items():
+                    if idx < len(vs):
+                        vals_idx.append(vs[idx])
+                if not vals_idx:
+                    continue
+                c_idx = len(vals_idx)
+                m_idx = float(mean(vals_idx))
+                s_idx = float(stdev(vals_idx)) if len(vals_idx) > 1 else float("nan")
+                if metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
+                    m_str_idx = fmt_mean(m_idx) + "%"
+                    s_str_idx = fmt_std(s_idx) + "%"
+                elif metric == "Adaptation MACs":
+                    m_str_idx = f"{m_idx:.6g}" if m_idx == m_idx else "nan"
+                    s_str_idx = f"{s_idx:.6g}" if s_idx == s_idx else "nan"
+                else:
+                    m_str_idx = fmt_mean(m_idx)
+                    s_str_idx = fmt_std(s_idx)
+                print(f"  Count {idx+1:2d} (across corr.): count={c_idx:2d}, mean= {m_str_idx} ({s_str_idx})")
+                if m_idx == m_idx:
+                    per_count_means.append(m_idx)
+            if per_count_means:
+                overall_mean_counts = float(mean(per_count_means))
+                overall_std_counts = float(stdev(per_count_means)) if len(per_count_means) > 1 else float("nan")
+            else:
+                overall_mean_counts = float("nan")
+                overall_std_counts = float("nan")
 
-        if metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
-            om_logs = fmt_mean(overall_mean_logs) + "%"
-            os_logs = fmt_std(overall_std_logs) + "%"
-        elif metric == "Adaptation MACs":
-            om_logs = f"{overall_mean_logs:.6g}" if overall_mean_logs == overall_mean_logs else "nan"
-            os_logs = f"{overall_std_logs:.6g}" if overall_std_logs == overall_std_logs else "nan"
-        else:
-            om_logs = fmt_mean(overall_mean_logs)
-            os_logs = fmt_std(overall_std_logs)
-        print(f"  {'Overall (across logs)':>28}: mean={om_logs} ({os_logs})")
+            if metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
+                om_cnt = fmt_mean(overall_mean_counts) + "%"
+                os_cnt = fmt_std(overall_std_counts) + "%"
+            elif metric == "Adaptation MACs":
+                om_cnt = f"{overall_mean_counts:.6g}" if overall_mean_counts == overall_mean_counts else "nan"
+                os_cnt = f"{overall_std_counts:.6g}" if overall_std_counts == overall_std_counts else "nan"
+            else:
+                om_cnt = fmt_mean(overall_mean_counts)
+                os_cnt = fmt_std(overall_std_counts)
+            print(f"  {'Overall (across counts)':>28}: mean= {om_cnt} ({os_cnt})")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Aggregate corruption-wise metrics across multiple logs.")
     parser.add_argument("logs", nargs="*", type=str, help="Paths to log files to parse")
     parser.add_argument("--metric", type=str, default=None, help="Single metric to print (e.g., Error, NLL, ECE)")
+    parser.add_argument("--avg_type", type=str, default="per_log", choices=["per_log", "per_count"],
+                        help="How to average overall metrics: per_log (default) or per_count (average across corruptions per count index)")
     args = parser.parse_args()
 
     default_logs = [
@@ -221,7 +273,7 @@ def main():
     log_paths = [Path(p) for p in (args.logs if args.logs else default_logs)]
 
     agg, order_by_metric, per_log_vals = aggregate_across_logs(log_paths)
-    print_aggregate(agg, order_by_metric, per_log_vals, selected_metric=args.metric)
+    print_aggregate(agg, order_by_metric, per_log_vals, selected_metric=args.metric, avg_type=args.avg_type)
 
 
 if __name__ == "__main__":

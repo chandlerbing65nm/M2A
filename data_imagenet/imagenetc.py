@@ -32,30 +32,32 @@ def evaluate(description):
     if getattr(args, "print_model", False):
         return
     # evaluate on each severity and type of corruption in turn
-    for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
-        for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            # reset adaptation for each combination of corruption x severity
-            # note: for evaluation protocol, but not necessarily needed
-            try:
-                if i_x == 0:
-                    model.reset()
-                    logger.info("resetting model")
-                else:
+    n_recur = max(1, int(getattr(args, "recur", 1)))
+    for r in range(n_recur):
+        for ii, severity in enumerate(cfg.CORRUPTION.SEVERITY):
+            for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
+                # reset adaptation only on the first full pass
+                # note: for evaluation protocol, but not necessarily needed
+                try:
+                    if r == 0 and i_x == 0:
+                        model.reset()
+                        logger.info("resetting model")
+                    else:
+                        logger.warning(" ")
+                        logger.warning("not resetting model")
+                except:
                     logger.warning(" ")
                     logger.warning("not resetting model")
-            except:
-                logger.warning(" ")
-                logger.warning("not resetting model")
-            x_test, y_test = load_imagenetc(cfg.CORRUPTION.NUM_EX,
-                                           severity, cfg.DATA_DIR, False,
-                                           [corruption_type])
-            acc, nll, ece, max_softmax, entropy = compute_metrics(
-                model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
-            )
-            err = 1. - acc
-            logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
-            logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
-            logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
+                x_test, y_test = load_imagenetc(cfg.CORRUPTION.NUM_EX,
+                                               severity, cfg.DATA_DIR, False,
+                                               [corruption_type])
+                acc, nll, ece, max_softmax, entropy = compute_metrics(
+                    model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
+                )
+                err = 1. - acc
+                logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
+                logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
+                logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
             # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
             # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
             

@@ -26,42 +26,37 @@ conda activate m2a
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit \
-#      --cfg cfgs/cifar10/source.yaml \
+#      --cfg cfgs/cifar10/vitb16/source.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_tent \
-#      --cfg cfgs/cifar10/tent.yaml \
+#      --cfg cfgs/cifar10/vitb16/tent.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_cotta \
-#      --cfg cfgs/cifar10/cotta.yaml \
+#      --cfg cfgs/cifar10/vitb16/cotta.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_mae\
-#      --cfg cfgs/cifar10/cmae.yaml \
+#      --cfg cfgs/cifar10/vitb16/cmae.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar10c_vit_rem \
-#      --cfg cfgs/cifar10/rem.yaml \
+#      --cfg cfgs/cifar10/vitb16/rem.yaml \
 #      --data_dir /scratch/project_465002264/datasets/cifar10c \
-#      --save_feat \
 #      CORRUPTION.NUM_EX 10000
 
 cd /users/doloriel/work/Repo/M2A/data_cifar
 python -m cifar10c_vit_m2a \
-     --cfg cfgs/cifar10/m2a.yaml \
+     --cfg cfgs/cifar10/vitb16/m2a.yaml \
      --data_dir /scratch/project_465002264/datasets/cifar10c \
      --lr 1e-3 \
      --seed 1 \
@@ -77,5 +72,5 @@ python -m cifar10c_vit_m2a \
      --mcl_distance ce \
      --steps 1 \
      --disable_erl \
-     --save_feat \
+     --batch_size 20 \
      CORRUPTION.NUM_EX 10000

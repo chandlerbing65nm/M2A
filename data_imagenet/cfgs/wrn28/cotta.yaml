@@ -1,17 +1,12 @@
-MODEL:
-  ADAPTATION: tent
-  ARCH: Standard_VITB
-TEST:
-  BATCH_SIZE: 4
 CORRUPTION:
-  DATASET: avffia
+  DATASET: imagenet
   SEVERITY:
-    - 5
+  - 5
   TYPE:
     - gaussian_noise
     - shot_noise
     - impulse_noise
-    - defocus_blur 
+    - defocus_blur
     - glass_blur
     - motion_blur
     - zoom_blur
@@ -23,9 +18,14 @@ CORRUPTION:
     - elastic_transform
     - pixelate
     - jpeg_compression
+MODEL:
+  ADAPTATION: cotta
+  ARCH: Standard_WRN28
 OPTIM:
-  METHOD: SGD
-  STEPS: 1
   BETA: 0.9
   LR: 1e-4
-  WD: 0.
+  METHOD: SGD
+  STEPS: 1
+  WD: 0.0
+TEST:
+  BATCH_SIZE: 64

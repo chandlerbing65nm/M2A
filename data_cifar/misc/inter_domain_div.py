@@ -45,6 +45,12 @@ VALID_METHODS = {
     "M2A (Spatial, EML only)",
     "M2A (Spatial, MCL only)",
     "M2A (Spatial, EML+MCL)",
+    # Additional granular M2A variants used in feature naming
+    "M2A (Spatial, Patch)",
+    "M2A (Spatial, Pixel)",
+    "M2A (Frequency, All)",
+    "M2A (Frequency, Low)",
+    "M2A (Frequency, High)",
 }
 
 
@@ -194,6 +200,16 @@ def main():
         help="Output directory for plots (default: data_cifar/plots/divergence).",
     )
     parser.add_argument(
+        "--print_source",
+        action="store_true",
+        help="If set, print the JS divergence values for the Source method.",
+    )
+    parser.add_argument(
+        "--tag",
+        default="",
+        help="Optional tag to append to the output filename.",
+    )
+    parser.add_argument(
         "--use_what",
         default="class_features_12",
         help="Which blockwise key to use (e.g., class_features_1..N, patch_mean_1..N, patch_std_1..N).",
@@ -223,6 +239,15 @@ def main():
         "M2A (Spatial, EML only)": "m2a_spatial",
         "M2A (Spatial, MCL only)": "m2a_spatial",
         "M2A (Spatial, EML+MCL)": "m2a_spatial",
+        # Granular M2A variants corresponding to specific masking configs.
+        # The underlying features currently store method tokens like
+        # 'm2a_spatial_binary' or 'm2a_spectral_binary', so we only
+        # check the broader spatial/spectral prefix here.
+        "M2A (Spatial, Patch)": "m2a_spatial",
+        "M2A (Spatial, Pixel)": "m2a_spatial",
+        "M2A (Frequency, All)": "m2a_spectral",
+        "M2A (Frequency, Low)": "m2a_spectral",
+        "M2A (Frequency, High)": "m2a_spectral",
     }
 
     for npy_path, legend_name in zip(args.npy, methods_canonical):
@@ -256,15 +281,14 @@ def main():
         if len(s) != num_pairs:
             raise RuntimeError("JS series have mismatched lengths")
 
-    # Joint normalization across methods to [0, 1] when comparing multiple inputs
-    normalized = False
-    if len(args.npy) > 1 and len(args.method) > 1:
-        all_vals = np.concatenate(js_series_list)
-        vmin = float(all_vals.min())
-        vmax = float(all_vals.max())
-        if vmax > vmin:
-            js_series_list = [(vals - vmin) / (vmax - vmin) for vals in js_series_list]
-            normalized = True
+    if getattr(args, "print_source", False):
+        source_series = None
+        for vals, name in zip(js_series_list, methods_canonical):
+            if name == "Source":
+                source_series = vals
+                break
+        if source_series is not None:
+            print("Source JS divergence series:", source_series)
 
     xs = np.arange(1, num_pairs + 1)
     xtick_labels = [f"c{i}-c{i+1}" for i in range(1, num_pairs + 1)]
@@ -280,8 +304,6 @@ def main():
     legend_fs = base_fs * 1.7
 
     ax = plt.gca()
-    if normalized:
-        ax.set_ylim(0.0, 1.0)
 
     # X-axis: only 4 ticks at specific pairs with custom labels
     # pairs: c3-c4, c6-c7, c9-10, c12-c13
@@ -317,7 +339,8 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
     stems = [os.path.splitext(os.path.basename(p))[0] for p in args.npy]
-    outfile = "inter_domain_divergence.jpg"
+    tag_suffix = f"_{args.tag}" if getattr(args, "tag", "") else ""
+    outfile = f"inter_domain_divergence{tag_suffix}.jpg"
     out_path = os.path.join(args.outdir, outfile)
     plt.tight_layout()
     plt.savefig(out_path, dpi=200)

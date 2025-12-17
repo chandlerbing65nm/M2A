@@ -1,12 +1,12 @@
 MODEL:
   ADAPTATION: M2A
-  ARCH: Standard_VITB_M2A   # VIT: Standard_VITB  CNN: Standard
+  ARCH: Standard   # VIT: Standard_VITB  CNN: Standard
   LN_QUARTER: default       # LayerNorm adaptation scope: default|q1|q2|q3|q4|all
 TEST:
-  BATCH_SIZE: 20
+  BATCH_SIZE: 200
 RNG_SEED: 1
 CORRUPTION:
-  DATASET: avffia
+  DATASET: cifar10
   SEVERITY:
     - 5
   TYPE:
