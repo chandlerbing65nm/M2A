@@ -33,7 +33,8 @@ OPTIM:
   WD: 0.0
   M: 0.1
   N: 3
-  LAMB: 1.0
+  LAMB_ERL: 1.0
+  LAMB_EML: 1.0
   MARGIN: 0.0
 
 # M2A: Stochastic Patch Erasing with Adaptive Residual Correction for

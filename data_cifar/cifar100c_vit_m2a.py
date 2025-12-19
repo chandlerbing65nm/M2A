@@ -73,22 +73,6 @@ def evaluate(description):
 
     # evaluate on each severity and type of corruption in turn
     all_error = []
-    accs_so_far = []  # for domain shift robustness
-    prev_x = None
-    prev_y = None
-    prev_acc_at_time = None
-
-    # Helper: format large numbers in base-10 scientific notation
-    def fmt_sci(n: int) -> str:
-        try:
-            if n == 0:
-                return "0"
-            import math
-            exp = int(math.floor(math.log10(abs(float(n)))))
-            mant = float(n) / (10 ** exp)
-            return f"{mant:.3f} x 10^{exp}"
-        except Exception:
-            return str(n)
     for severity in cfg.CORRUPTION.SEVERITY:
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
             if i_c == 0:
@@ -119,48 +103,21 @@ def evaluate(description):
             metrics = compute_metrics(
                 model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
             )
-            acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = metrics
+            acc, nll, ece, max_softmax, entropy, mcl_last, erl_last, eml_last = metrics
             err = 1. - acc
             all_error.append(err)
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
             logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
-            logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
-            logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
+            # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
+            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
             logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
             logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
             logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
             # New metrics per corruption (averaged per corruption)
-            logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
-            logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
-
-            # Domain Shift Robustness: std of accuracies across types so far (lower is better)
-            accs_so_far.append(acc)
-            if len(accs_so_far) >= 2:
-                import math
-                mean_acc = sum(accs_so_far) / float(len(accs_so_far))
-                var_acc = sum((a - mean_acc) ** 2 for a in accs_so_far) / float(len(accs_so_far))
-                dsr = math.sqrt(var_acc)
-            else:
-                dsr = 0.0
-            logger.info(f"Domain Shift Robustness (std, lower is better) up to [{corruption_type}{severity}]: {dsr:.4f}")
-
-            # Catastrophic Forgetting Rate (measured): re-evaluate previous corruption after current adaptation
-            if prev_x is not None and prev_y is not None and prev_acc_at_time is not None:
-                try:
-                    m2a_model = model.module if hasattr(model, 'module') else model
-                    ctx = m2a_model.no_adapt_mode() if hasattr(m2a_model, 'no_adapt_mode') else nullcontext()
-                except Exception:
-                    ctx = nullcontext()
-                with ctx:
-                    re_metrics = compute_metrics(
-                        model, prev_x, prev_y, cfg.TEST.BATCH_SIZE, device=device
-                    )
-                    re_acc = re_metrics[0]
-                cfr_measured = max(0.0, float(prev_acc_at_time) - float(re_acc))
-                logger.info(f"Catastrophic Forgetting Rate (prev-domain, lower is better) after [{corruption_type}{severity}]: {cfr_measured:.4f}")
-            prev_x, prev_y, prev_acc_at_time = x_test, y_test, acc
+            # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
+            # logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
+            # logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
 
     # Save checkpoint after full evaluation if requested
     try:
@@ -213,43 +170,8 @@ def compute_metrics(model: nn.Module,
     nll_sum = 0.0
     max_softmax_sum = 0.0
     entropy_sum = 0.0
-    cos_sum = 0.0
     confs_all = []
     correct_all = []
-    # Adaptation timing and MACs accumulators
-    adapt_time_total = 0.0
-    adapt_macs_total = 0
-
-    def estimate_vit_macs_per_image(stats_src, img_size: int) -> int:
-        try:
-            m = stats_src
-            # Unwrap M2A and DataParallel to reach underlying ViT
-            if hasattr(m, 'module'):
-                m = m.module
-            if hasattr(m, 'model'):
-                m = m.model
-            if hasattr(m, 'module'):
-                m = m.module
-            pe = m.patch_embed
-            pe_inner = pe.inner if hasattr(pe, 'inner') else pe
-            ps = pe_inner.proj.weight.shape[2]
-            D = getattr(m, 'embed_dim', m.head.in_features)
-            depth = len(m.blocks)
-            D_m = m.blocks[0].mlp.fc1.out_features
-            mlp_ratio = float(D_m) / float(D)
-            Ph = img_size // ps
-            Pw = img_size // ps
-            L = 1 + (Ph * Pw)
-            C_in = pe_inner.proj.weight.shape[1]
-            macs_patch = (Ph * Pw) * (C_in * D * ps * ps)
-            per_block = (3 * L * D * D) + (2 * L * L * D) + (L * D * D) + (2 * L * D * int(mlp_ratio * D))
-            macs_blocks = depth * per_block
-            num_classes = m.head.out_features if hasattr(m.head, 'out_features') else 1000
-            macs_head = D * num_classes
-            total = macs_patch + macs_blocks + macs_head
-            return int(total)
-        except Exception:
-            return 0
 
     with torch.no_grad():
         for b in range(n_batches):
@@ -261,13 +183,7 @@ def compute_metrics(model: nn.Module,
             x_b_full = x_b_full.to(device)
             y_b_full = y_b_full.to(device)
 
-            # Single prediction pass (may adapt internally)
-            t0 = time.time()
             output = model(x_b_full)
-            adapt_time_total += (time.time() - t0)
-            stats_src = model.module if hasattr(model, 'module') else model
-            per_img_macs = estimate_vit_macs_per_image(stats_src, img_size=x_b_full.shape[-1])
-            adapt_macs_total += per_img_macs * int(x_b_full.shape[0])
             y_eval = y_b_full
 
             logits = output
@@ -278,13 +194,10 @@ def compute_metrics(model: nn.Module,
             probs = logits.softmax(dim=1)
             confs = probs.max(dim=1).values
             ents = -(probs * probs.clamp_min(1e-12).log()).sum(dim=1)
-            one_hot = F.one_hot(y_eval.long(), num_classes=logits.shape[-1]).float()
-            cos_b = F.cosine_similarity(probs, one_hot, dim=1)
             confs_all.append(confs.detach().cpu())
             correct_all.append((preds == y_eval).detach().cpu())
             max_softmax_sum += float(confs.sum().item())
             entropy_sum += float(ents.sum().item())
-            cos_sum += float(cos_b.sum().item())
 
     if total_eval == 0:
         mcl_last = getattr(model, 'last_mcl', 0.0)
@@ -296,13 +209,12 @@ def compute_metrics(model: nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+        return 0.0, 0.0, 0.0, 0.0, 0.0, mcl_last, erl_last, eml_last
 
     acc = correct / total_eval
     nll = nll_sum / total_eval
     max_softmax = max_softmax_sum / total_eval if total_eval > 0 else 0.0
     entropy = entropy_sum / total_eval if total_eval > 0 else 0.0
-    cos_sim = cos_sum / total_eval if total_eval > 0 else 0.0
     confs_all = torch.cat(confs_all) if len(confs_all) else torch.empty(0)
     correct_all = torch.cat(correct_all).float() if len(correct_all) else torch.empty(0)
     ece = compute_ece(confs_all, correct_all)
@@ -330,7 +242,7 @@ def compute_metrics(model: nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-    return acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+    return acc, nll, ece, max_softmax, entropy, mcl_last, erl_last, eml_last
 
 
 def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:
@@ -395,7 +307,8 @@ def setup_m2a(model):
         episodic=cfg.MODEL.EPISODIC,
         m=cfg.OPTIM.M,
         n=cfg.OPTIM.N,
-        lamb=cfg.OPTIM.LAMB,
+        lamb=cfg.OPTIM.LAMB_ERL,
+        lamb_eml=cfg.OPTIM.LAMB_EML,
         margin=cfg.OPTIM.MARGIN,
         random_masking=cfg.M2A.RANDOM_MASKING,
         num_squares=cfg.M2A.NUM_SQUARES,

@@ -83,7 +83,7 @@ def evaluate(description):
                     model.reset_loss_stats()
                 except Exception:
                     pass
-            acc, nll, ece, max_softmax, entropy, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = compute_metrics(
+            acc, nll, ece, max_softmax, entropy, total_cnt, mcl_last, erl_last, eml_last = compute_metrics(
                 model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device
             )
             err = 1. - acc
@@ -91,10 +91,10 @@ def evaluate(description):
             logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
             logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
             logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
-            logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
-            logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
-            logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
+            # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
+            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+            # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
+            # logger.info(f"Adaptation MACs (lower is better) [{corruption_type}{severity}]: {fmt_sci(adapt_macs_total)}")
             logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
             logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
             logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
@@ -163,7 +163,7 @@ def setup_rem(model):
                            episodic=cfg.MODEL.EPISODIC,
                            m = cfg.OPTIM.M,
                            n = cfg.OPTIM.N,
-                           lamb = cfg.OPTIM.LAMB,
+                           lamb = cfg.OPTIM.LAMB_ERL,
                            margin = cfg.OPTIM.MARGIN,
                            )
     logger.info(f"optimizer for adaptation: %s", optimizer)
@@ -203,55 +203,12 @@ def compute_metrics(model: torch.nn.Module,
     entropy_sum = 0.0
     confs_all = []
     correct_all = []
-    adapt_time_total = 0.0
-    adapt_macs_total = 0
-
-    def unwrap_model(m):
-        try:
-            while True:
-                if hasattr(m, 'module'):
-                    m = m.module
-                elif hasattr(m, 'model'):
-                    m = getattr(m, 'model')
-                else:
-                    break
-        except Exception:
-            pass
-        return m
-
-    def estimate_vit_macs_per_image(stats_src, img_size: int) -> int:
-        try:
-            m = unwrap_model(stats_src)
-            # crude estimate for ViT compute
-            if hasattr(m, 'patch_embed') and hasattr(m.patch_embed, 'proj'):
-                ps = m.patch_embed.proj.kernel_size[0]
-                seq = (img_size // ps) ** 2 + 1
-            else:
-                ps = 16
-                seq = (img_size // ps) ** 2 + 1
-            heads = getattr(getattr(m, 'blocks', [None])[0], 'attn', None)
-            num_heads = getattr(heads, 'num_heads', 12) if heads is not None else 12
-            d_model = getattr(m, 'embed_dim', 768)
-            attn_cost = 2 * (seq ** 2) * num_heads
-            proj_cost = 3 * seq * d_model * d_model
-            mlp_cost = 2 * seq * d_model * (4 * d_model)
-            blocks = len(getattr(m, 'blocks', [])) or 12
-            total = blocks * (attn_cost + proj_cost + mlp_cost)
-            return int(total)
-        except Exception:
-            return 0
-
-    per_img_macs = estimate_vit_macs_per_image(model, img_size=x.shape[-1])
-
     for i in range(n_batches):
         lo = i * batch_size
         hi = min((i + 1) * batch_size, total_cnt)
         x_b = x[lo:hi].to(device)
         y_b = y[lo:hi].to(device)
-        t0 = time.time()
         output = model(x_b)
-        adapt_time_total += (time.time() - t0)
-        adapt_macs_total += per_img_macs * int(x_b.shape[0])
 
         logits = output if isinstance(output, torch.Tensor) else output[0]
         preds = logits.argmax(dim=1)
@@ -276,7 +233,7 @@ def compute_metrics(model: torch.nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-        return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+        return 0.0, 0.0, 0.0, 0.0, 0.0, total_cnt, mcl_last, erl_last, eml_last
 
     acc = correct / total_eval
     nll = nll_sum / total_eval
@@ -309,7 +266,7 @@ def compute_metrics(model: torch.nn.Module,
             eml_last = float(eml_last)
         except Exception:
             mcl_last, erl_last, eml_last = 0.0, 0.0, 0.0
-    return acc, nll, ece, max_softmax, entropy, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last
+    return acc, nll, ece, max_softmax, entropy, total_cnt, mcl_last, erl_last, eml_last
 
 
 def compute_ece(confs: torch.Tensor, correct: torch.Tensor, n_bins: int = 15) -> float:

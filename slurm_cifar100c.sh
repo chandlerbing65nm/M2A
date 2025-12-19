@@ -36,12 +36,12 @@ conda activate m2a
 #      --data_dir /scratch/project_465002264/datasets/cifar100c \
 #      CORRUPTION.NUM_EX 10000
 
-cd /users/doloriel/work/Repo/M2A/data_cifar
-python -m cifar100c_vit_vida \
-     --cfg cfgs/cifar100/vida.yaml \
-     --data_dir /scratch/project_465002264/datasets/cifar100c \
-     --checkpoint /users/doloriel/work/Repo/M2A/ckpt/vit_1_128_vida_cifar100c.t7 \
-     CORRUPTION.NUM_EX 10000
+# cd /users/doloriel/work/Repo/M2A/data_cifar
+# python -m cifar100c_vit_vida \
+#      --cfg cfgs/cifar100/vida.yaml \
+#      --data_dir /scratch/project_465002264/datasets/cifar100c \
+#      --checkpoint /users/doloriel/work/Repo/M2A/ckpt/vit_1_128_vida_cifar100c.t7 \
+#      CORRUPTION.NUM_EX 10000
 
 # cd /users/doloriel/work/Repo/M2A/data_cifar
 # python -m cifar100c_vit_mae \
@@ -56,22 +56,23 @@ python -m cifar100c_vit_vida \
 #      --data_dir /scratch/project_465002264/datasets/cifar100c \
 #      CORRUPTION.NUM_EX 10000
 
-# cd data_cifar
-# python -m cifar100c_vit_m2a \
-#      --cfg cfgs/cifar100/m2a.yaml \
-#      --data_dir /scratch/project_465002264/datasets/cifar100c \
-#      --lr 1e-3 \
-#      --seed 1 \
-#      --lamb 1.0 \
-#      --margin 0.0 \
-#      --random_masking spatial \
-#      --spatial_type patch \
-#      --spectral_type all \
-#      --num_squares 1 \
-#      --mask_type binary \
-#      --m 0.1 \
-#      --n 3 \
-#      --mcl_distance ce \
-#      --steps 1 \
-#      --disable_erl \
-#      CORRUPTION.NUM_EX 100000
+cd /users/doloriel/work/Repo/M2A/data_cifar
+python -m cifar100c_vit_m2a \
+     --cfg cfgs/cifar100/m2a.yaml \
+     --data_dir /scratch/project_465002264/datasets/cifar100c \
+     --lr 1e-3 \
+     --seed 1 \
+     --lamb_erl 1.0 \
+     --lamb_eml 1.0 \
+     --margin 0.0 \
+     --random_masking spatial \
+     --spatial_type patch \
+     --spectral_type all \
+     --num_squares 1 \
+     --mask_type binary \
+     --m 0.1 \
+     --n 3 \
+     --mcl_distance ce \
+     --steps 1 \
+     --disable_eml --disable_mcl \
+     CORRUPTION.NUM_EX 10000

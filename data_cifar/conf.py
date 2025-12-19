@@ -110,6 +110,7 @@ _C.TEST = CfgNode()
 _C.TEST.BATCH_SIZE = 128
 _C.TEST.BATCH_METRICS = False
 _C.TEST.DOMAIN_GEN = False
+_C.TEST.RAND_DOMAIN = False
 
 # --------------------------------- CUDNN options --------------------------- #
 _C.CUDNN = CfgNode()
@@ -157,7 +158,8 @@ _C.OPTIM.ViDALR=1e-4
 # REM parameters
 _C.OPTIM.M = 0.1
 _C.OPTIM.N = 3
-_C.OPTIM.LAMB = 1.0
+_C.OPTIM.LAMB_ERL = 1.0
+_C.OPTIM.LAMB_EML = 1.0
 _C.OPTIM.MARGIN = 0.0
 
 # Phase distortion options
@@ -278,6 +280,8 @@ def load_cfg_fom_args(description="Config options."):
                         help="If set, compute and log metrics per batch with fixed batch size 20")
     parser.add_argument("--domain_gen", action="store_true",
                         help="Enable domain generalization mode: adapt on first 10 corruptions, then evaluate only on remaining 5 (no further adaptation)")
+    parser.add_argument("--rand_domain", action="store_true",
+                        help="If set, randomize corruption domain order 10 times with model reset between permutations")
     parser.add_argument("--batch_size", type=int, default=None,
                         help="Override batch size used for evaluation/adaptation (maps to TEST.BATCH_SIZE)")
 
@@ -291,8 +295,10 @@ def load_cfg_fom_args(description="Config options."):
     parser.add_argument("--lr", type=float, default=None,
                         help="Learning rate for optimizer (maps to OPTIM.LR)")
     # (Removed progressive/adaptive masking CLI args)
-    parser.add_argument("--lamb", type=float, default=None,
-                        help="Lambda for entropy-ordering loss (maps to OPTIM.LAMB)")
+    parser.add_argument("--lamb_erl", type=float, default=None,
+                        help="Lambda for entropy-ordering loss (maps to OPTIM.LAMB_ERL)")
+    parser.add_argument("--lamb_eml", type=float, default=None,
+                        help="Lambda for entropy minimization loss (maps to OPTIM.LAMB_EML)")
     parser.add_argument("--margin", type=float, default=None,
                         help="Margin multiplier in entropy-ordering loss (maps to OPTIM.MARGIN)")
 
@@ -371,6 +377,7 @@ def load_cfg_fom_args(description="Config options."):
     if cfg.TEST.BATCH_METRICS:
         cfg.TEST.BATCH_SIZE = 20
     cfg.TEST.DOMAIN_GEN = bool(getattr(args, "domain_gen", False))
+    cfg.TEST.RAND_DOMAIN = bool(getattr(args, "rand_domain", False))
     if getattr(args, "batch_size", None) is not None:
         try:
             cfg.TEST.BATCH_SIZE = int(args.batch_size)
@@ -394,8 +401,10 @@ def load_cfg_fom_args(description="Config options."):
     if args.lr is not None:
         cfg.OPTIM.LR = args.lr
     # (Removed progressive/adaptive OPTIM overrides from CLI)
-    if args.lamb is not None:
-        cfg.OPTIM.LAMB = args.lamb
+    if args.lamb_erl is not None:
+        cfg.OPTIM.LAMB_ERL = args.lamb_erl
+    if args.lamb_eml is not None:
+        cfg.OPTIM.LAMB_EML = args.lamb_eml
     if args.margin is not None:
         cfg.OPTIM.MARGIN = args.margin
 

@@ -257,12 +257,76 @@ def print_aggregate(agg: Dict[str, Dict[str, List[float]]], order_by_metric: Dic
             print(f"  {'Overall (across counts)':>28}: mean= {om_cnt} ({os_cnt})")
 
 
+def metric_name_from_arg(name: str) -> str:
+    """Map a CLI metric name (case-insensitive) to one of the known PATTERNS keys."""
+    if not name:
+        return "Error"
+    key = name.strip().lower()
+    mapping = {m.lower(): m for m in PATTERNS.keys()}
+    return mapping.get(key, "Error")
+
+
+def print_rand_domain_summary(log_path: Path, metric_arg: str) -> None:
+    """Special handling for rand_domain CIFAR-10C CTTA logs.
+
+    Assumes a single log where the 15 CIFAR-10-C corruptions are presented
+    in random order for each permutation, with model resets between
+    permutations. We ignore resets explicitly and simply group the chosen
+    metric values into contiguous blocks of 15 and average within each
+    block. The resulting per-block means are printed as a single
+    LaTeX-friendly row: v1 & v2 & ...
+    """
+
+    metric = metric_name_from_arg(metric_arg)
+    parsed = parse_log_file_detailed(log_path)
+    pairs = parsed.get(metric, [])
+    if not pairs:
+        print(f"No metric '{metric}' found in log {log_path}.")
+        return
+
+    # Preserve chronological order from the log
+    vals = [v for _, v in pairs]
+
+    group_size = 15  # CIFAR-10-C has 15 corruption types
+    num_groups = len(vals) // group_size
+    if num_groups == 0:
+        print(f"Not enough entries for metric '{metric}' in {log_path} to form a 15-corruption block.")
+        return
+
+    group_means: List[float] = []
+    for g in range(num_groups):
+        start = g * group_size
+        end = start + group_size
+        chunk = vals[start:end]
+        if not chunk:
+            continue
+        group_means.append(float(mean(chunk)))
+
+    # Format numbers using existing helpers. For Error we keep the value
+    # as-is (already in % units from the logs) and just format the mean.
+    formatted: List[str] = []
+    for m in group_means:
+        if metric == "Adaptation MACs":
+            formatted.append(f"{m:.6g}")
+        elif metric in ("Domain Shift Robustness", "Catastrophic Forgetting Rate"):
+            # These are stored as fractions in normal aggregation; multiply by 100 here.
+            formatted.append(fmt_mean(m * 100.0))
+        else:
+            formatted.append(fmt_mean(m))
+
+    print(f"Rand-domain summary for metric '{metric}' from {log_path}:")
+    print(" & ".join(formatted))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Aggregate corruption-wise metrics across multiple logs.")
     parser.add_argument("logs", nargs="*", type=str, help="Paths to log files to parse")
     parser.add_argument("--metric", type=str, default=None, help="Single metric to print (e.g., Error, NLL, ECE)")
     parser.add_argument("--avg_type", type=str, default="per_log", choices=["per_log", "per_count"],
                         help="How to average overall metrics: per_log (default) or per_count (average across corruptions per count index)")
+    parser.add_argument("--rand_domain", action="store_true",
+                        help="Handle a single CIFAR-10-C CTTA log with randomly permuted corruption domains; "
+                             "group the chosen metric into 15-corruption blocks and print the mean per block as a LaTeX row.")
     args = parser.parse_args()
 
     default_logs = [
@@ -271,6 +335,15 @@ def main():
         "/users/doloriel/work/Repo/M2A/logs/output_13685946.txt",
     ]
     log_paths = [Path(p) for p in (args.logs if args.logs else default_logs)]
+
+    if args.rand_domain:
+        if len(log_paths) != 1:
+            print("--rand_domain expects exactly one log file (got {}), please specify a single log.".format(len(log_paths)),
+                  file=sys.stderr)
+            sys.exit(1)
+        metric_for_rand = args.metric if args.metric is not None else "Error"
+        print_rand_domain_summary(log_paths[0], metric_for_rand)
+        return
 
     agg, order_by_metric, per_log_vals = aggregate_across_logs(log_paths)
     print_aggregate(agg, order_by_metric, per_log_vals, selected_metric=args.metric, avg_type=args.avg_type)

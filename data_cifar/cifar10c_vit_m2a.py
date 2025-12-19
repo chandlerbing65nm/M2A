@@ -82,69 +82,80 @@ def evaluate(description):
 
     # evaluate on each severity and type of corruption in turn
     all_error = []
+    use_rand_domain = bool(getattr(cfg.TEST, "RAND_DOMAIN", False))
+    n_permutations = 10 if use_rand_domain else 1
     for severity in cfg.CORRUPTION.SEVERITY:
         severity_domains = {}
-        for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            domain_gen = bool(getattr(cfg.TEST, "DOMAIN_GEN", False))
-            no_adapt_this = domain_gen and (i_c >= 10)
-            if not no_adapt_this:
-                if i_c == 0:
-                    try:
-                        if hasattr(model, 'reset'):
-                            model.reset()
+        for perm_idx in range(n_permutations):
+            if use_rand_domain and perm_idx > 0:
+                order = np.random.permutation(len(cfg.CORRUPTION.TYPE))
+            else:
+                order = range(len(cfg.CORRUPTION.TYPE))
+            for pos_in_order, idx in enumerate(order):
+                corruption_type = cfg.CORRUPTION.TYPE[idx]
+                domain_gen = bool(getattr(cfg.TEST, "DOMAIN_GEN", False))
+                no_adapt_this = domain_gen and (pos_in_order >= 10)
+                if not no_adapt_this:
+                    if pos_in_order == 0:
+                        try:
+                            if hasattr(model, 'reset'):
+                                model.reset()
+                                logger.info("")
+                                logger.info("resetting model")
+                        except Exception:
                             logger.info("")
-                            logger.info("resetting model")
-                    except Exception:
+                            logger.warning("not resetting model")
+                    else:
                         logger.info("")
                         logger.warning("not resetting model")
-                else:
-                    logger.info("")
-                    logger.warning("not resetting model")
-            x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
-                                           severity, cfg.DATA_DIR, False,
-                                           [corruption_type])
-            x_test = F.interpolate(x_test, size=(args.size, args.size),
-                                   mode='bilinear', align_corners=False)
+                x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+                                               severity, cfg.DATA_DIR, False,
+                                               [corruption_type])
+                x_test = F.interpolate(x_test, size=(args.size, args.size),
+                                       mode='bilinear', align_corners=False)
             # No divisibility requim2aent for spatial masking (pixel-level squares)
             # Compute metrics (acc, nll, ece, max-softmax, entropy)
             # No directional metrics reset; focusing on standard/confidence metrics
 
-            # Reset per-corruption M2A loss statistics if available
-            if hasattr(model, 'reset_loss_stats'):
-                try:
-                    model.reset_loss_stats()
-                except Exception:
-                    pass
-            metrics = compute_metrics(
-                model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
-                tag=f"[{corruption_type}{severity}]", no_adapt=bool(no_adapt_this)
-            )
-            acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = metrics
-            err = 1. - acc
-            all_error.append(err)
-            logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
-            logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
-            logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
-            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
-            # logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
-            logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
-            logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
-            logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
-            if getattr(args, "save_feat", False):
-                domain_data = save_domain_features(
-                    method_name=method_name,
-                    model=model,
-                    x=x_test,
-                    y=y_test,
-                    severity=severity,
-                    corruption_type=corruption_type,
-                    batch_size=cfg.TEST.BATCH_SIZE,
-                    device=device,
+                # Reset per-corruption M2A loss statistics if available
+                if hasattr(model, 'reset_loss_stats'):
+                    try:
+                        model.reset_loss_stats()
+                    except Exception:
+                        pass
+                metrics = compute_metrics(
+                    model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
+                    tag=f"[{corruption_type}{severity}]", no_adapt=bool(no_adapt_this)
                 )
-                if domain_data is not None:
-                    domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
-                    severity_domains[domain_id] = domain_data
+                acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = metrics
+                err = 1. - acc
+                all_error.append(err)
+                logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
+                logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
+                logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
+                # logger.info(f"Max Softmax [{corruption_type}{severity}]: {max_softmax:.4f}")
+                # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+                # logger.info(f"Cosine(pred_softmax, target_onehot) [{corruption_type}{severity}]: {cos_sim:.4f}")
+                logger.info(f"MCL (avg per corruption) [{corruption_type}{severity}]: {mcl_last:.6f}")
+                logger.info(f"ERL (avg per corruption) [{corruption_type}{severity}]: {erl_last:.6f}")
+                logger.info(f"EML (avg per corruption) [{corruption_type}{severity}]: {eml_last:.6f}")
+                if getattr(args, "save_feat", False):
+                    domain_data = save_domain_features(
+                        method_name=method_name,
+                        model=model,
+                        x=x_test,
+                        y=y_test,
+                        severity=severity,
+                        corruption_type=corruption_type,
+                        batch_size=cfg.TEST.BATCH_SIZE,
+                        device=device,
+                    )
+                    if domain_data is not None:
+                        domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
+                        severity_domains[domain_id] = domain_data
+
+            if use_rand_domain:
+                print(f"{perm_idx + 1} random iteration done!")
 
         if getattr(args, "save_feat", False):
             save_severity_features(method_name, severity, severity_domains)
@@ -642,7 +653,8 @@ def setup_m2a(model):
         episodic=cfg.MODEL.EPISODIC,
         m=cfg.OPTIM.M,
         n=cfg.OPTIM.N,
-        lamb=cfg.OPTIM.LAMB,
+        lamb=cfg.OPTIM.LAMB_ERL,
+        lamb_eml=cfg.OPTIM.LAMB_EML,
         margin=cfg.OPTIM.MARGIN,
         random_masking=cfg.M2A.RANDOM_MASKING,
         num_squares=cfg.M2A.NUM_SQUARES,

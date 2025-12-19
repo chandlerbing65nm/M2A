@@ -70,53 +70,64 @@ def evaluate(description):
     if getattr(cfg, "PRINT_MODEL", False):
         return
     All_error = []
+    use_rand_domain = bool(getattr(cfg.TEST, "RAND_DOMAIN", False))
+    n_permutations = 10 if use_rand_domain else 1
     for severity in cfg.CORRUPTION.SEVERITY:
         severity_domains = {}
-        for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            if i_c == 0:
-                try:
-                    model.reset()
-                    logger.info("resetting model")
-                except:
+        for perm_idx in range(n_permutations):
+            if use_rand_domain and perm_idx > 0:
+                order = np.random.permutation(len(cfg.CORRUPTION.TYPE))
+            else:
+                order = range(len(cfg.CORRUPTION.TYPE))
+            for pos_in_order, idx in enumerate(order):
+                corruption_type = cfg.CORRUPTION.TYPE[idx]
+                if pos_in_order == 0:
+                    try:
+                        model.reset()
+                        logger.info("resetting model")
+                    except:
+                        logger.warning("not resetting model")
+                else:
                     logger.warning("not resetting model")
-            else:
-                logger.warning("not resetting model")
-            x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
-                                           severity, cfg.DATA_DIR, False,
-                                           [corruption_type])
-            x_test = torch.nn.functional.interpolate(x_test, size=(args.size, args.size), \
-                mode='bilinear', align_corners=False)
+                x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+                                               severity, cfg.DATA_DIR, False,
+                                               [corruption_type])
+                x_test = torch.nn.functional.interpolate(x_test, size=(args.size, args.size), \
+                    mode='bilinear', align_corners=False)
 
-            if getattr(cfg.TEST, "BATCH_METRICS", False):
-                acc, nll, ece, _, _, _, _, _, _, _, _, _ = compute_metrics(
-                    model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
-                    tag=f"[{corruption_type}{severity}]"
-                )
-                err = 1. - acc
-                All_error.append(err)
-                logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
-                logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
-                logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            else:
-                acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device='cuda')
-                err = 1. - acc
-                All_error.append(err)
-                logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+                if getattr(cfg.TEST, "BATCH_METRICS", False):
+                    acc, nll, ece, _, _, _, _, _, _, _, _, _ = compute_metrics(
+                        model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
+                        tag=f"[{corruption_type}{severity}]"
+                    )
+                    err = 1. - acc
+                    All_error.append(err)
+                    logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
+                    logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
+                    logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
+                else:
+                    acc = accuracy(model, x_test, y_test, cfg.TEST.BATCH_SIZE, device='cuda')
+                    err = 1. - acc
+                    All_error.append(err)
+                    logger.info(f"error % [{corruption_type}{severity}]: {err:.2%}")
 
-            if getattr(args, "save_feat", False):
-                domain_data = save_domain_features(
-                    method_name=method_name,
-                    model=model,
-                    x=x_test,
-                    y=y_test,
-                    severity=severity,
-                    corruption_type=corruption_type,
-                    batch_size=cfg.TEST.BATCH_SIZE,
-                    device=device,
-                )
-                if domain_data is not None:
-                    domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
-                    severity_domains[domain_id] = domain_data
+                if getattr(args, "save_feat", False):
+                    domain_data = save_domain_features(
+                        method_name=method_name,
+                        model=model,
+                        x=x_test,
+                        y=y_test,
+                        severity=severity,
+                        corruption_type=corruption_type,
+                        batch_size=cfg.TEST.BATCH_SIZE,
+                        device=device,
+                    )
+                    if domain_data is not None:
+                        domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
+                        severity_domains[domain_id] = domain_data
+
+            if use_rand_domain:
+                print(f"{perm_idx + 1} random iteration done!")
 
         if getattr(args, "save_feat", False):
             save_severity_features(method_name, severity, severity_domains)

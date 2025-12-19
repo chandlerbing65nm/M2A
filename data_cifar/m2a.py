@@ -353,7 +353,7 @@ class M2A(nn.Module):
     """
     def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer,
                  steps: int = 1, episodic: bool = False,
-                 m: float = 0.1, n: int = 3, lamb: float = 1.0, margin: float = 0.0,
+                 m: float = 0.1, n: int = 3, lamb: float = 1.0, lamb_eml: float = 1.0, margin: float = 0.0,
                  random_masking: str = 'spatial',
                  num_squares: int = 1,
                  mask_type: str = 'binary',
@@ -396,6 +396,7 @@ class M2A(nn.Module):
         self.n = int(n)
         self.mn = [i * self.m for i in range(self.n)]
         self.lamb = lamb
+        self.lamb_eml = float(lamb_eml)
         self.margin = margin
 
         self.entropy = Entropy()
@@ -927,7 +928,7 @@ class M2A(nn.Module):
         if isinstance(erl_loss, torch.Tensor) and erl_loss.requires_grad:
             loss_terms.append(self.lamb * erl_loss)
         if isinstance(eml_loss, torch.Tensor) and eml_loss.requires_grad:
-            loss_terms.append(eml_loss)
+            loss_terms.append(self.lamb_eml * eml_loss)
         # taln_reg is a no-op and not included
 
         if (logm2a_reg_loss is not None) and (self.logm2a_reg > 0.0):

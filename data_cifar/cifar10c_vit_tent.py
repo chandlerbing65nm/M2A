@@ -77,60 +77,71 @@ def evaluate(description):
 
     # evaluate on each severity and type of corruption in turn
     All_error = []
+    use_rand_domain = bool(getattr(cfg.TEST, "RAND_DOMAIN", False))
+    n_permutations = 10 if use_rand_domain else 1
     for severity in cfg.CORRUPTION.SEVERITY:
         severity_domains = {}
-        for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            domain_gen = bool(getattr(cfg.TEST, "DOMAIN_GEN", False))
-            no_adapt_this = domain_gen and (i_c >= 10)
-            if not no_adapt_this:
-                if i_c == 0:
-                    try:
-                        model.reset()
-                        logger.info("resetting model")
-                    except:
+        for perm_idx in range(n_permutations):
+            if use_rand_domain and perm_idx > 0:
+                order = np.random.permutation(len(cfg.CORRUPTION.TYPE))
+            else:
+                order = range(len(cfg.CORRUPTION.TYPE))
+            for pos_in_order, idx in enumerate(order):
+                corruption_type = cfg.CORRUPTION.TYPE[idx]
+                domain_gen = bool(getattr(cfg.TEST, "DOMAIN_GEN", False))
+                no_adapt_this = domain_gen and (pos_in_order >= 10)
+                if not no_adapt_this:
+                    if pos_in_order == 0:
+                        try:
+                            model.reset()
+                            logger.info("resetting model")
+                        except:
+                            logger.warning("not resetting model")
+                    else:
                         logger.warning("not resetting model")
-                else:
-                    logger.warning("not resetting model")
-            x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
-                                           severity, cfg.DATA_DIR, False,
-                                           [corruption_type])
-            x_test = F.interpolate(x_test, size=(args.size, args.size), \
-                mode='bilinear', align_corners=False)
+                x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+                                               severity, cfg.DATA_DIR, False,
+                                               [corruption_type])
+                x_test = F.interpolate(x_test, size=(args.size, args.size), \
+                    mode='bilinear', align_corners=False)
 
-            # Reset per-corruption loss statistics if available
-            if hasattr(model, 'reset_loss_stats'):
-                try:
-                    model.reset_loss_stats()
-                except Exception:
-                    pass
+                # Reset per-corruption loss statistics if available
+                if hasattr(model, 'reset_loss_stats'):
+                    try:
+                        model.reset_loss_stats()
+                    except Exception:
+                        pass
 
-            acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = compute_metrics(
-                model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
-                tag=f"[{corruption_type}{severity}]", no_adapt=bool(no_adapt_this)
-            )
-            err = 1. - acc
-            All_error.append(err)
-            logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
-            logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
-            logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
-            # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
-            # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
-
-            # Optionally save forward features/logits/probabilities/predictions/labels per corruption
-            if getattr(args, "save_feat", False):
-                domain_data = save_domain_features(
-                    method_name=method_name,
-                    model=model,
-                    x=x_test,
-                    y=y_test,
-                    severity=severity,
-                    corruption_type=corruption_type,
-                    batch_size=cfg.TEST.BATCH_SIZE,
-                    device=device,
+                acc, nll, ece, max_softmax, entropy, cos_sim, total_cnt, adapt_time_total, adapt_macs_total, mcl_last, erl_last, eml_last = compute_metrics(
+                    model, x_test, y_test, cfg.TEST.BATCH_SIZE, device=device,
+                    tag=f"[{corruption_type}{severity}]", no_adapt=bool(no_adapt_this)
                 )
-                if domain_data is not None:
-                    domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
-                    severity_domains[domain_id] = domain_data
+                err = 1. - acc
+                All_error.append(err)
+                logger.info(f"Error % [{corruption_type}{severity}]: {err:.2%}")
+                logger.info(f"NLL [{corruption_type}{severity}]: {nll:.4f}")
+                logger.info(f"ECE [{corruption_type}{severity}]: {ece:.4f}")
+                # logger.info(f"Entropy [{corruption_type}{severity}]: {entropy:.4f}")
+                # logger.info(f"Adaptation Time (lower is better) [{corruption_type}{severity}]: {adapt_time_total:.3f}s")
+
+                # Optionally save forward features/logits/probabilities/predictions/labels per corruption
+                if getattr(args, "save_feat", False):
+                    domain_data = save_domain_features(
+                        method_name=method_name,
+                        model=model,
+                        x=x_test,
+                        y=y_test,
+                        severity=severity,
+                        corruption_type=corruption_type,
+                        batch_size=cfg.TEST.BATCH_SIZE,
+                        device=device,
+                    )
+                    if domain_data is not None:
+                        domain_id = domain_data.get("domain_id", f"{corruption_type}_{severity}")
+                        severity_domains[domain_id] = domain_data
+
+            if use_rand_domain:
+                print(f"{perm_idx + 1} random iteration done!")
 
         if getattr(args, "save_feat", False):
             save_severity_features(method_name, severity, severity_domains)

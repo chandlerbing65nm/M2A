@@ -60,7 +60,8 @@ python -m cifar10c_vit_m2a \
      --data_dir /scratch/project_465002264/datasets/cifar10c \
      --lr 1e-3 \
      --seed 1 \
-     --lamb 1.0 \
+     --lamb_erl 1.0 \
+     --lamb_eml 1.0 \
      --margin 0.0 \
      --random_masking spatial \
      --spatial_type patch \
@@ -72,5 +73,4 @@ python -m cifar10c_vit_m2a \
      --mcl_distance ce \
      --steps 1 \
      --disable_erl \
-     --batch_size 20 \
      CORRUPTION.NUM_EX 10000
