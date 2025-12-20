@@ -111,6 +111,7 @@ _C.TEST.BATCH_SIZE = 128
 _C.TEST.BATCH_METRICS = False
 _C.TEST.DOMAIN_GEN = False
 _C.TEST.RAND_DOMAIN = False
+_C.TEST.ENABLE_CDC = False
 
 # --------------------------------- CUDNN options --------------------------- #
 _C.CUDNN = CfgNode()
@@ -282,6 +283,8 @@ def load_cfg_fom_args(description="Config options."):
                         help="Enable domain generalization mode: adapt on first 10 corruptions, then evaluate only on remaining 5 (no further adaptation)")
     parser.add_argument("--rand_domain", action="store_true",
                         help="If set, randomize corruption domain order 10 times with model reset between permutations")
+    parser.add_argument("--enable_cdc", action="store_true",
+                        help="If set, evaluate using a continual domain curriculum (CDC) sequence across corruptions instead of per-corruption blocks")
     parser.add_argument("--batch_size", type=int, default=None,
                         help="Override batch size used for evaluation/adaptation (maps to TEST.BATCH_SIZE)")
 
@@ -378,6 +381,7 @@ def load_cfg_fom_args(description="Config options."):
         cfg.TEST.BATCH_SIZE = 20
     cfg.TEST.DOMAIN_GEN = bool(getattr(args, "domain_gen", False))
     cfg.TEST.RAND_DOMAIN = bool(getattr(args, "rand_domain", False))
+    cfg.TEST.ENABLE_CDC = bool(getattr(args, "enable_cdc", False))
     if getattr(args, "batch_size", None) is not None:
         try:
             cfg.TEST.BATCH_SIZE = int(args.batch_size)

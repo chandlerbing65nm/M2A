@@ -16,6 +16,7 @@ from robustbench.utils import clean_accuracy as accuracy
 
 from conf import cfg, load_cfg_fom_args
 import m2a
+from utils_cdc import create_cdc_sequence
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,67 @@ def evaluate(description):
         model = setup_source(base_model)
         method_name = "source"
     if getattr(cfg, "PRINT_MODEL", False):
+        return
+    if bool(getattr(cfg.TEST, "ENABLE_CDC", False)):
+        corruptions = cfg.CORRUPTION.TYPE
+        num_total_batches = cfg.CORRUPTION.NUM_EX // cfg.TEST.BATCH_SIZE + 1
+        domain_order = create_cdc_sequence(num_total_batches=num_total_batches)
+
+        corruption_res = [0] * len(corruptions)
+        corruption_idx = [0] * len(corruptions)
+        total = 0
+
+        for severity in cfg.CORRUPTION.SEVERITY:
+            all_loaders = []
+            for i_x, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
+                x_test, y_test = load_cifar10c(cfg.CORRUPTION.NUM_EX,
+                                               severity, cfg.DATA_DIR, False,
+                                               [corruption_type])
+                # Keep x_test at its original resolution to save memory; we will
+                # upsample per-batch only for the current slice.
+                all_loaders.append((x_test, y_test))
+                logger.info(f"[{corruption_type}{severity}] Loaded")
+
+            for i_xx, order_i in enumerate(domain_order):
+                x_test, y_test = all_loaders[order_i]
+                start = corruption_idx[order_i]
+                end = start + cfg.TEST.BATCH_SIZE
+                if start >= x_test.shape[0]:
+                    continue
+                x_curr = x_test[start:end]
+                # Upsample only the current batch to the desired ViT input size
+                x_curr = F.interpolate(x_curr, size=(args.size, args.size),
+                                       mode='bilinear', align_corners=False)
+                x_curr = x_curr.to(device)
+                y_curr = y_test[start:end].to(device)
+                corruption_idx[order_i] += cfg.TEST.BATCH_SIZE
+
+                output = model(x_curr)
+                output = output[0] if isinstance(output, tuple) else output
+                preds = output.max(1)[1]
+                correct = (preds == y_curr).float().sum().item()
+                corruption_res[order_i] += correct
+                batch_size_curr = y_curr.shape[0]
+                total += batch_size_curr
+                if batch_size_curr > 0:
+                    acc_curr = correct / batch_size_curr
+                else:
+                    acc_curr = 0.0
+                err_curr = 1.0 - acc_curr
+                if total > 0:
+                    acc_running = sum(corruption_res) / total
+                else:
+                    acc_running = 0.0
+                err_running = 1.0 - acc_running
+                logger.info(
+                    f"[{i_xx}/{len(domain_order)}: {corruptions[order_i]}] current error: {err_curr:.2%}, running error: {err_running:.2%}"
+                )
+
+        all_error = [1.0 - (float(corr) / float(cfg.CORRUPTION.NUM_EX)) for corr in corruption_res]
+        all_error_res = " ".join([f"{e:.2%}" for e in all_error])
+        logger.info(f"All error: {all_error_res}")
+        if len(all_error) > 0:
+            logger.info(f"Mean error: {sum(all_error) / len(all_error):.2%}")
         return
 
     # evaluate on each severity and type of corruption in turn
