@@ -193,12 +193,14 @@ def load_corrupted_data(dataset: str, severity: int) -> Tuple[torch.Tensor, torc
         x, y = load_cifar10c(n_examples=n_examples,
                              severity=severity,
                              data_dir="/scratch/project_465002264/datasets/cifar10c",
-                             shuffle=False)
+                             shuffle=False,
+                             corruptions=["jpeg_compression"])
     elif dataset == 'cifar100c':
         x, y = load_cifar100c(n_examples=n_examples,
                               severity=severity,
                               data_dir="/scratch/project_465002264/datasets/cifar100c",
-                              shuffle=False)
+                              shuffle=False,
+                              corruptions=["jpeg_compression"])
     else:
         raise ValueError(f"Unsupported dataset '{dataset}'.")
 
