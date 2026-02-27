@@ -1,0 +1,47 @@
+CORRUPTION:
+  DATASET: imagenet_c
+  SEVERITY:
+    - 5
+  TYPE:
+    - gaussian_noise
+    - shot_noise
+    - impulse_noise
+    - defocus_blur
+    - glass_blur
+    - motion_blur
+    - zoom_blur
+    - snow
+    - frost
+    - fog
+    - brightness
+    - contrast
+    - elastic_transform
+    - pixelate
+    - jpeg_compression
+MODEL:
+  ADAPTATION: m2a
+  ARCH: Standard_ViT_B
+OPTIM:
+  BETA: 0.9
+  LR: 1e-3
+  METHOD: Adam
+  STEPS: 1
+  WD: 0.0
+TEST:
+  BATCH_SIZE: 64
+
+M2A:
+  M: 0.1
+  N: 3
+  LAMBDA_ERL: 1.0
+  LAMBDA_EML: 1.0
+  MARGIN: 0.0
+  RANDOM_MASKING: spatial   # 'spatial' or 'spectral'
+  NUM_SQUARES: 1            # number of spatial squares when SPATIAL_TYPE is 'patch'
+  MASK_TYPE: binary         # 'binary', 'gaussian', or 'mean'
+  SPATIAL_TYPE: patch       # 'patch' or 'pixel'
+  SPECTRAL_TYPE: all        # 'all', 'low', or 'high'
+  SEED: 1                   # set <0 to disable fixed masking seed
+  DISABLE_MCL: false        # disable multi-level consistency loss if true
+  DISABLE_ERL: true         # disable entropy ranking loss if true
+  DISABLE_EML: false        # disable entropy minimization loss if true
